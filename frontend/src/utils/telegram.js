@@ -1,26 +1,30 @@
 // Telegram Web App SDK
-const tg = window.Telegram?.WebApp;
+const tg = typeof window !== 'undefined' ? window.Telegram?.WebApp : undefined;
 
 // Инициализация приложения
 export function initTelegramApp() {
   if (!tg) {
-    console.warn('Telegram WebApp SDK не найден');
+    console.warn('Telegram WebApp SDK не найден, работаем как обычный сайт');
     return null;
   }
 
-  // Разворачиваем приложение на весь экран
-  tg.expand();
+  try {
+    // Разворачиваем приложение на весь экран (если метод есть)
+    tg.expand?.();
 
-  // Устанавливаем цвета темы
-  tg.setHeaderColor('#0F0F0F');
-  tg.setBackgroundColor('#0F0F0F');
+    // Устанавливаем цвета темы (если методы есть)
+    tg.setHeaderColor?.('#0F0F0F');
+    tg.setBackgroundColor?.('#0F0F0F');
 
-  // Включаем кнопку закрытия
-  tg.enableClosingConfirmation();
+    // Включаем подтверждение закрытия только если нужно
+    // tg.enableClosingConfirmation?.();
 
-  console.log('✅ Telegram WebApp инициализирован');
-  console.log('User ID:', getUserId());
-  console.log('Platform:', tg.platform);
+    console.log('✅ Telegram WebApp инициализирован');
+    console.log('User ID:', getUserId());
+    console.log('Platform:', tg.platform);
+  } catch (error) {
+    console.warn('Ошибка инициализации Telegram WebApp, продолжаем без него:', error);
+  }
 
   return tg;
 }
