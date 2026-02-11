@@ -1,0 +1,39 @@
+[
+  {
+    "id": "1707234567890",
+    "name": "Nike Air Max 90",
+    "price": 8990,
+    "description": "Классические кроссовки Nike Air Max с отличной амортизацией. Верх из комбинации кожи и текстиля. Подходят для повседневной носки.\n\nОсобенности:\n- Технология Air для комфорта\n- Прочная резиновая подошва\n- Дышащий материал\n- Стильный дизайн",
+    "category": "Обувь",
+    "photos": [
+      "https://res.cloudinary.com/demo/image/upload/v1/shoes/nike-air-max-90-1.jpg",
+      "https://res.cloudinary.com/demo/image/upload/v1/shoes/nike-air-max-90-2.jpg"
+    ],
+    "createdAt": "2025-02-01T10:00:00.000Z",
+    "views": 45
+  },
+  {
+    "id": "1707234567891",
+    "name": "Худи Supreme Classic",
+    "price": 5490,
+    "description": "Стильная толстовка с капюшоном от Supreme. Мягкий хлопок, удобный крой.\n\nХарактеристики:\n- Состав: 80% хлопок, 20% полиэстер\n- Карман-кенгуру\n- Рибы на манжетах\n- Логотип Supreme на груди\n\nДоступные размеры: S, M, L, XL",
+    "category": "Худи",
+    "photos": [
+      "https://res.cloudinary.com/demo/image/upload/v1/clothing/supreme-hoodie-1.jpg"
+    ],
+    "createdAt": "2025-02-02T12:00:00.000Z",
+    "views": 32
+  },
+  {
+    "id": "1707234567892",
+    "name": "Футболка Carhartt WIP",
+    "price": 2990,
+    "description": "Базовая футболка от Carhartt WIP. Плотный хлопок, оверсайз крой.\n\nДетали:\n- 100% хлопок\n- Плотность 200 г/м²\n- Небольшая вышивка на груди\n- Свободный крой\n\nРазмеры: M, L, XL",
+    "category": "Футболки",
+    "photos": [
+      "https://res.cloudinary.com/demo/image/upload/v1/clothing/carhartt-tee.jpg"
+    ],
+    "createdAt": "2025-02-03T14:00:00.000Z",
+    "views": 28
+  }
+]
