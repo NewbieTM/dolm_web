@@ -79,28 +79,6 @@ bot.onText(/\/start/, async (msg) => {
   }
 });
 
-// Команда /admin - только для админа
-bot.onText(/\/admin/, async (msg) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  
-  if (userId !== ADMIN_ID) {
-    await bot.sendMessage(chatId, '❌ У вас нет доступа к админ-панели');
-    return;
-  }
-  
-  const adminMenu = `
-🔧 Админ-панель
-
-Доступные команды:
-/add_product - Добавить товар
-/list_products - Список товаров
-/delete_product [ID] - Удалить товар
-/stats - Статистика
-  `;
-  
-  await bot.sendMessage(chatId, adminMenu);
-});
 
 // Команда /add_product - добавление товара
 bot.onText(/\/add_product/, async (msg) => {
