@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getProduct, viewProduct, addToHistory, addToFavorites, removeFromFavorites, getConfig } from '../utils/api';
+import { getProduct, viewProduct, addToFavorites, removeFromFavorites, getFavorites, getConfig } from '../utils/api';
 import { getUserId, showBackButton, hideBackButton, vibrate, openTelegramLink } from '../utils/telegram';
 
 const Product = () => {
@@ -13,9 +13,14 @@ const Product = () => {
   const [managerUsername, setManagerUsername] = useState('');
   const userId = getUserId();
 
+  // ✅ НОВОЕ: Для свайпа
+  const touchStartX = useRef(0);
+  const touchEndX = useRef(0);
+
   useEffect(() => {
     loadProduct();
     loadConfig();
+    loadFavoriteStatus();
     
     // Показываем кнопку "Назад"
     showBackButton(() => {
@@ -35,9 +40,6 @@ const Product = () => {
         
         // Фиксируем просмотр
         await viewProduct(id);
-        
-        // Добавляем в историю
-        await addToHistory(userId, id);
       }
     } catch (error) {
       console.error('Ошибка загрузки товара:', error);
@@ -54,6 +56,19 @@ const Product = () => {
       }
     } catch (error) {
       console.error('Ошибка загрузки конфига:', error);
+    }
+  };
+
+  // ✅ ИСПРАВЛЕНО: Загружаем статус избранного
+  const loadFavoriteStatus = async () => {
+    try {
+      const response = await getFavorites(userId);
+      if (response.success) {
+        const favoriteIds = response.data.map(product => product.id);
+        setIsFavorite(favoriteIds.includes(id));
+      }
+    } catch (error) {
+      console.error('Ошибка загрузки избранного:', error);
     }
   };
 
@@ -83,6 +98,38 @@ const Product = () => {
   const handleImageClick = (index) => {
     vibrate('light');
     setCurrentImageIndex(index);
+  };
+
+  // ✅ НОВОЕ: Обработчики свайпа
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchMove = (e) => {
+    touchEndX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (!product || product.photos.length <= 1) return;
+
+    const swipeDistance = touchStartX.current - touchEndX.current;
+    const minSwipeDistance = 50; // минимальное расстояние для свайпа
+
+    if (Math.abs(swipeDistance) < minSwipeDistance) return;
+
+    if (swipeDistance > 0) {
+      // Свайп влево - следующее фото
+      setCurrentImageIndex((prev) => 
+        prev === product.photos.length - 1 ? 0 : prev + 1
+      );
+      vibrate('light');
+    } else {
+      // Свайп вправо - предыдущее фото
+      setCurrentImageIndex((prev) => 
+        prev === 0 ? product.photos.length - 1 : prev - 1
+      );
+      vibrate('light');
+    }
   };
 
   if (loading) {
@@ -118,15 +165,29 @@ const Product = () => {
 
   return (
     <div className="min-h-screen bg-dark-bg pb-24">
-      {/* Галерея */}
+      {/* Галерея с поддержкой свайпа */}
       <div className="relative">
         {/* Главное фото */}
-        <div className="aspect-square bg-dark-card">
+        <div 
+          className="aspect-square bg-dark-card relative overflow-hidden"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
           <img
             src={product.photos[currentImageIndex]}
             alt={product.name}
             className="w-full h-full object-cover"
           />
+          
+          {/* Индикатор количества фото */}
+          {product.photos.length > 1 && (
+            <div className="absolute top-4 left-4 bg-black/50 backdrop-blur-sm rounded-full px-3 py-1">
+              <span className="text-white text-sm font-medium">
+                {currentImageIndex + 1} / {product.photos.length}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Кнопка избранного */}
@@ -150,17 +211,23 @@ const Product = () => {
         {/* Миниатюры */}
         {product.photos.length > 1 && (
           <div className="absolute bottom-4 left-0 right-0 px-4">
-            <div className="flex gap-2 justify-center">
-              {product.photos.map((_, index) => (
+            <div className="flex gap-2 justify-center overflow-x-auto pb-2">
+              {product.photos.map((photo, index) => (
                 <button
                   key={index}
                   onClick={() => handleImageClick(index)}
-                  className={`w-2 h-2 rounded-full transition-all duration-200 ${
+                  className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all duration-200 ${
                     currentImageIndex === index
-                      ? 'bg-white w-6'
-                      : 'bg-white/50'
+                      ? 'border-accent scale-110'
+                      : 'border-transparent opacity-60 hover:opacity-100'
                   }`}
-                />
+                >
+                  <img
+                    src={photo}
+                    alt={`${product.name} - фото ${index + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                </button>
               ))}
             </div>
           </div>
@@ -168,53 +235,51 @@ const Product = () => {
       </div>
 
       {/* Информация о товаре */}
-      <div className="p-4 space-y-6">
-        {/* Название и цена */}
-        <div>
-          <div className="flex items-start justify-between gap-4 mb-2">
-            <h1 className="text-2xl font-bold text-white flex-1">
-              {product.name}
-            </h1>
+      <div className="p-4">
+        {/* Категория */}
+        <div className="mb-3">
+          <span className="inline-block px-3 py-1 bg-dark-card rounded-full text-sm text-gray-400">
+            {product.category}
+          </span>
+        </div>
+
+        {/* Название */}
+        <h1 className="text-2xl font-bold text-white mb-4">
+          {product.name}
+        </h1>
+
+        {/* Цена */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="text-3xl font-bold text-accent">
+            {product.price.toLocaleString('ru-RU')} ₽
           </div>
           
-          <div className="flex items-center gap-3">
-            <span className="text-3xl font-bold text-accent">
-              {product.price.toLocaleString('ru-RU')} ₽
-            </span>
-            <span className="px-3 py-1 bg-dark-card rounded-full text-sm text-gray-400">
-              {product.category}
-            </span>
-          </div>
+          {product.views > 0 && (
+            <div className="flex items-center gap-2 text-gray-400">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+              <span>{product.views} просмотров</span>
+            </div>
+          )}
         </div>
 
         {/* Описание */}
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-2">Описание</h2>
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold text-white mb-3">Описание</h2>
           <p className="text-gray-300 leading-relaxed whitespace-pre-line">
             {product.description}
           </p>
         </div>
 
-        {/* Просмотры */}
-        {product.views > 0 && (
-          <div className="flex items-center gap-2 text-gray-400">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-            </svg>
-            <span>{product.views} просмотров</span>
-          </div>
-        )}
-      </div>
-
-      {/* Кнопка связи с менеджером */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-dark-bg via-dark-bg to-transparent">
+        {/* Кнопка связи с менеджером */}
         <button
           onClick={handleContactManager}
-          className="w-full bg-accent hover:bg-accent-hover text-white font-semibold py-4 rounded-xl transition-all duration-200 transform active:scale-[0.98] flex items-center justify-center gap-2"
+          className="w-full bg-accent hover:bg-accent-hover text-white font-semibold py-4 px-6 rounded-2xl transition-colors duration-200 flex items-center justify-center gap-2"
         >
-          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.161c-.18.717-.962 4.038-1.36 5.358-.168.559-.5.746-.82.764-.696.064-1.225-.46-1.9-.902-1.056-.692-1.653-1.123-2.678-1.799-1.185-.782-.417-1.213.258-1.915.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.479.329-.913.489-1.302.481-.428-.009-1.252-.242-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635.099-.002.321.023.465.14.121.098.155.231.171.325.016.094.036.308.02.475z"/>
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
           </svg>
           Связаться с менеджером
         </button>

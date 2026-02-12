@@ -42,18 +42,7 @@ const BottomNav = () => {
           <span className="text-xs font-medium">Избранное</span>
         </button>
 
-        {/* История */}
-        <button
-          onClick={() => handleNavigate('/history')}
-          className={`flex flex-col items-center gap-1 transition-colors duration-200 ${
-            isActive('/history') ? 'text-accent' : 'text-gray-400'
-          }`}
-        >
-          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span className="text-xs font-medium">История</span>
-        </button>
+        {/* ✅ УБРАНО: Кнопка истории */}
       </div>
     </nav>
   );
