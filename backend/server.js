@@ -2,14 +2,6 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
-// Выбор между MongoDB и JSON базой
-const USE_MONGODB = process.env.USE_MONGODB === 'true' && process.env.MONGODB_URI;
-const db = USE_MONGODB ? require('./mongodb') : require('./database');
-
-console.log('🗄️  Используется:', USE_MONGODB ? 'MongoDB' : 'JSON файлы');
-
-const bot = require('./bot'); // Импортируем бота чтобы он работал
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -20,11 +12,41 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Инициализация БД при запуске
-db.initDatabase().then(() => {
+// Выбор базы данных с fallback
+let db;
+let USE_MONGODB = false;
+
+async function initializeDatabase() {
+  const wantsMongoDB = process.env.USE_MONGODB === 'true' && process.env.MONGODB_URI;
+  
+  if (wantsMongoDB) {
+    try {
+      console.log('🔄 Попытка подключения к MongoDB...');
+      db = require('./mongodb');
+      await db.initDatabase();
+      USE_MONGODB = true;
+      console.log('✅ Используется MongoDB');
+    } catch (error) {
+      console.error('❌ MongoDB недоступна, переключаемся на JSON:', error.message);
+      db = require('./database');
+      await db.initDatabase();
+      console.log('⚠️  Используется JSON (fallback)');
+    }
+  } else {
+    db = require('./database');
+    await db.initDatabase();
+    console.log('📁 Используется JSON файлы');
+  }
+}
+
+// Запускаем бота только после инициализации БД
+initializeDatabase().then(() => {
+  // Импортируем бота только после инициализации БД
+  const bot = require('./bot');
   console.log('✅ База данных готова к работе');
 }).catch(err => {
-  console.error('❌ Ошибка инициализации БД:', err);
+  console.error('❌ Критическая ошибка инициализации:', err);
+  process.exit(1);
 });
 
 // ========== ROUTES ==========
@@ -51,16 +73,10 @@ app.get('/api/config', (req, res) => {
 
 // ========== PRODUCTS ==========
 
-// Получить все товары с фильтрацией
 app.get('/api/products', async (req, res) => {
   try {
     const { category, search, sort } = req.query;
-    
-    const products = await db.filterProducts({
-      category,
-      search,
-      sort
-    });
+    const products = await db.filterProducts({ category, search, sort });
     
     res.json({
       success: true,
@@ -76,7 +92,6 @@ app.get('/api/products', async (req, res) => {
   }
 });
 
-// Получить товар по ID
 app.get('/api/products/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -102,7 +117,6 @@ app.get('/api/products/:id', async (req, res) => {
   }
 });
 
-// Увеличить счётчик просмотров
 app.post('/api/products/:id/view', async (req, res) => {
   try {
     const { id } = req.params;
@@ -123,7 +137,6 @@ app.post('/api/products/:id/view', async (req, res) => {
 
 // ========== CATEGORIES ==========
 
-// Получить список категорий
 app.get('/api/categories', async (req, res) => {
   try {
     const products = await db.getAllProducts();
@@ -144,7 +157,6 @@ app.get('/api/categories', async (req, res) => {
 
 // ========== FAVORITES ==========
 
-// Получить избранное пользователя
 app.get('/api/users/:userId/favorites', async (req, res) => {
   try {
     const { userId } = req.params;
@@ -166,7 +178,6 @@ app.get('/api/users/:userId/favorites', async (req, res) => {
   }
 });
 
-// Добавить в избранное
 app.post('/api/users/:userId/favorites/:productId', async (req, res) => {
   try {
     const { userId, productId } = req.params;
@@ -189,7 +200,6 @@ app.post('/api/users/:userId/favorites/:productId', async (req, res) => {
   }
 });
 
-// Удалить из избранного
 app.delete('/api/users/:userId/favorites/:productId', async (req, res) => {
   try {
     const { userId, productId } = req.params;
@@ -214,7 +224,6 @@ app.delete('/api/users/:userId/favorites/:productId', async (req, res) => {
 
 // ========== USER ==========
 
-// Получить или создать пользователя
 app.post('/api/users/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
@@ -236,7 +245,6 @@ app.post('/api/users/:userId', async (req, res) => {
   }
 });
 
-// Получить пользователя
 app.get('/api/users/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
@@ -264,7 +272,6 @@ app.get('/api/users/:userId', async (req, res) => {
 
 // ========== ADMIN ENDPOINTS ==========
 
-// Получить статистику (только для админа)
 app.get('/api/admin/stats', async (req, res) => {
   try {
     const stats = await db.getStats();

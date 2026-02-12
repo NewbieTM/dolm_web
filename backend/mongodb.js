@@ -1,23 +1,60 @@
-const { MongoClient } = require('mongodb');
+const { MongoClient, ServerApiVersion } = require('mongodb');
 
 const MONGODB_URI = process.env.MONGODB_URI;
 const DB_NAME = 'clothing-shop';
 
 let client;
 let db;
+let isConnecting = false;
 
-// Подключение к MongoDB
+// Подключение к MongoDB с правильными опциями
 async function connectDB() {
+  if (db) return db;
+  if (isConnecting) {
+    // Ждём пока подключение завершится
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    return db;
+  }
+
   try {
-    if (!client) {
-      client = new MongoClient(MONGODB_URI);
-      await client.connect();
-      db = client.db(DB_NAME);
-      console.log('✅ Подключено к MongoDB');
+    isConnecting = true;
+    
+    if (!MONGODB_URI) {
+      throw new Error('MONGODB_URI не установлена');
     }
+
+    console.log('🔌 Подключаемся к MongoDB...');
+    
+    client = new MongoClient(MONGODB_URI, {
+      serverApi: {
+        version: ServerApiVersion.v1,
+        strict: true,
+        deprecationErrors: true,
+      },
+      // Важные опции для Render.com
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      maxIdleTimeMS: 30000,
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+      family: 4, // Используем IPv4
+      retryWrites: true,
+      retryReads: true,
+    });
+
+    await client.connect();
+    
+    // Проверяем подключение
+    await client.db("admin").command({ ping: 1 });
+    
+    db = client.db(DB_NAME);
+    console.log('✅ Подключено к MongoDB');
+    
+    isConnecting = false;
     return db;
   } catch (error) {
-    console.error('❌ Ошибка подключения к MongoDB:', error);
+    isConnecting = false;
+    console.error('❌ Ошибка подключения к MongoDB:', error.message);
     throw error;
   }
 }
@@ -25,63 +62,67 @@ async function connectDB() {
 // Инициализация БД
 async function initDatabase() {
   try {
-    await connectDB();
+    const database = await connectDB();
     
     // Создаём коллекции если их нет
-    const collections = await db.listCollections().toArray();
+    const collections = await database.listCollections().toArray();
     const collectionNames = collections.map(c => c.name);
     
     if (!collectionNames.includes('products')) {
-      await db.createCollection('products');
+      await database.createCollection('products');
+      console.log('📦 Создана коллекция products');
     }
     if (!collectionNames.includes('users')) {
-      await db.createCollection('users');
+      await database.createCollection('users');
+      console.log('👥 Создана коллекция users');
     }
     if (!collectionNames.includes('stats')) {
-      await db.createCollection('stats');
+      await database.createCollection('stats');
       // Инициализируем статистику
-      await db.collection('stats').insertOne({
-        _id: 'global',
-        totalViews: 0,
-        totalUsers: 0,
-        popularProducts: {},
-        dailyStats: {}
-      });
+      const statsCount = await database.collection('stats').countDocuments({ _id: 'global' });
+      if (statsCount === 0) {
+        await database.collection('stats').insertOne({
+          _id: 'global',
+          totalViews: 0,
+          totalUsers: 0,
+          popularProducts: {},
+          dailyStats: {}
+        });
+        console.log('📊 Инициализирована статистика');
+      }
     }
     
     console.log('✅ MongoDB база данных инициализирована');
   } catch (error) {
-    console.error('❌ Ошибка инициализации БД:', error);
+    console.error('❌ Ошибка инициализации БД:', error.message);
+    // Не пробрасываем ошибку дальше, чтобы сервер мог запуститься
   }
 }
 
 // ========== PRODUCTS ==========
 
-// Получить все товары
 async function getAllProducts() {
   try {
     const database = await connectDB();
     const products = await database.collection('products').find({}).toArray();
     return products;
   } catch (error) {
-    console.error('Ошибка получения товаров:', error);
+    console.error('Ошибка получения товаров:', error.message);
     return [];
   }
 }
 
-// Получить товар по ID
 async function getProductById(id) {
   try {
     const database = await connectDB();
     const product = await database.collection('products').findOne({ id });
     return product;
   } catch (error) {
-    console.error('Ошибка получения товара:', error);
+    console.error('Ошибка получения товара:', error.message);
     return null;
   }
 }
 
-// Добавить товар
 async function addProduct(product) {
   try {
     const database = await connectDB();
@@ -92,14 +133,14 @@ async function addProduct(product) {
       views: 0
     };
     await database.collection('products').insertOne(newProduct);
+    console.log('✅ Товар добавлен:', newProduct.id);
     return newProduct;
   } catch (error) {
-    console.error('Ошибка добавления товара:', error);
+    console.error('Ошибка добавления товара:', error.message);
     return null;
   }
 }
 
-// Обновить товар
 async function updateProduct(id, updates) {
   try {
     const database = await connectDB();
@@ -109,24 +150,22 @@ async function updateProduct(id, updates) {
     );
     return await getProductById(id);
   } catch (error) {
-    console.error('Ошибка обновления товара:', error);
+    console.error('Ошибка обновления товара:', error.message);
     return null;
   }
 }
 
-// Удалить товар
 async function deleteProduct(id) {
   try {
     const database = await connectDB();
     const result = await database.collection('products').deleteOne({ id });
     return result.deletedCount > 0;
   } catch (error) {
-    console.error('Ошибка удаления товара:', error);
+    console.error('Ошибка удаления товара:', error.message);
     return false;
   }
 }
 
-// Фильтрация товаров
 async function filterProducts({ category, search, sort }) {
   try {
     const database = await connectDB();
@@ -147,7 +186,7 @@ async function filterProducts({ category, search, sort }) {
     if (sort === 'price_asc') sortOptions.price = 1;
     else if (sort === 'price_desc') sortOptions.price = -1;
     else if (sort === 'popular') sortOptions.views = -1;
-    else sortOptions.createdAt = -1; // new
+    else sortOptions.createdAt = -1;
     
     const products = await database.collection('products')
       .find(query)
@@ -156,12 +195,11 @@ async function filterProducts({ category, search, sort }) {
     
     return products;
   } catch (error) {
-    console.error('Ошибка фильтрации товаров:', error);
+    console.error('Ошибка фильтрации товаров:', error.message);
     return [];
   }
 }
 
-// Увеличить просмотры
 async function incrementProductViews(id) {
   try {
     const database = await connectDB();
@@ -170,7 +208,6 @@ async function incrementProductViews(id) {
       { $inc: { views: 1 } }
     );
     
-    // Обновляем статистику
     await database.collection('stats').updateOne(
       { _id: 'global' },
       { 
@@ -183,30 +220,27 @@ async function incrementProductViews(id) {
     
     return true;
   } catch (error) {
-    console.error('Ошибка увеличения просмотров:', error);
+    console.error('Ошибка увеличения просмотров:', error.message);
     return false;
   }
 }
 
 // ========== USERS ==========
 
-// Получить пользователя
 async function getUser(userId) {
   try {
     const database = await connectDB();
     const user = await database.collection('users').findOne({ id: userId });
     return user;
   } catch (error) {
-    console.error('Ошибка получения пользователя:', error);
+    console.error('Ошибка получения пользователя:', error.message);
     return null;
   }
 }
 
-// Создать/обновить пользователя
 async function upsertUser(userId, userData) {
   try {
     const database = await connectDB();
-    
     const existingUser = await getUser(userId);
     
     if (!existingUser) {
@@ -218,6 +252,7 @@ async function upsertUser(userId, userData) {
         ...userData
       };
       await database.collection('users').insertOne(newUser);
+      console.log('✅ Пользователь создан:', userId);
       return newUser;
     } else {
       await database.collection('users').updateOne(
@@ -227,43 +262,48 @@ async function upsertUser(userId, userData) {
       return await getUser(userId);
     }
   } catch (error) {
-    console.error('Ошибка upsert пользователя:', error);
+    console.error('Ошибка upsert пользователя:', error.message);
     return null;
   }
 }
 
-// Получить всех пользователей
 async function getAllUsers() {
   try {
     const database = await connectDB();
     const users = await database.collection('users').find({}).toArray();
     return users;
   } catch (error) {
-    console.error('Ошибка получения пользователей:', error);
+    console.error('Ошибка получения пользователей:', error.message);
     return [];
   }
 }
 
 // ========== FAVORITES ==========
 
-// Добавить в избранное
 async function addToFavorites(userId, productId) {
   try {
     const database = await connectDB();
+    
+    // Создаём пользователя если его нет
+    const user = await getUser(userId);
+    if (!user) {
+      await upsertUser(userId, { favorites: [productId] });
+      return [productId];
+    }
+    
     await database.collection('users').updateOne(
       { id: userId },
       { $addToSet: { favorites: productId } }
     );
     
-    const user = await getUser(userId);
-    return user?.favorites || [];
+    const updatedUser = await getUser(userId);
+    return updatedUser?.favorites || [];
   } catch (error) {
-    console.error('Ошибка добавления в избранное:', error);
+    console.error('Ошибка добавления в избранное:', error.message);
     return [];
   }
 }
 
-// Удалить из избранного
 async function removeFromFavorites(userId, productId) {
   try {
     const database = await connectDB();
@@ -275,16 +315,15 @@ async function removeFromFavorites(userId, productId) {
     const user = await getUser(userId);
     return user?.favorites || [];
   } catch (error) {
-    console.error('Ошибка удаления из избранного:', error);
+    console.error('Ошибка удаления из избранного:', error.message);
     return [];
   }
 }
 
-// Получить избранное
 async function getFavorites(userId) {
   try {
     const user = await getUser(userId);
-    if (!user || !user.favorites) return [];
+    if (!user || !user.favorites || user.favorites.length === 0) return [];
     
     const database = await connectDB();
     const products = await database.collection('products')
@@ -293,64 +332,13 @@ async function getFavorites(userId) {
     
     return products;
   } catch (error) {
-    console.error('Ошибка получения избранного:', error);
-    return [];
-  }
-}
-
-// ========== HISTORY (опционально, если решите вернуть) ==========
-
-// Добавить в историю
-async function addToHistory(userId, productId) {
-  try {
-    const database = await connectDB();
-    
-    // Удаляем если уже есть
-    await database.collection('users').updateOne(
-      { id: userId },
-      { $pull: { viewHistory: productId } }
-    );
-    
-    // Добавляем в начало
-    await database.collection('users').updateOne(
-      { id: userId },
-      { $push: { viewHistory: { $each: [productId], $position: 0, $slice: 50 } } }
-    );
-    
-    const user = await getUser(userId);
-    return user?.viewHistory || [];
-  } catch (error) {
-    console.error('Ошибка добавления в историю:', error);
-    return [];
-  }
-}
-
-// Получить историю
-async function getHistory(userId) {
-  try {
-    const user = await getUser(userId);
-    if (!user || !user.viewHistory) return [];
-    
-    const database = await connectDB();
-    const products = await database.collection('products')
-      .find({ id: { $in: user.viewHistory } })
-      .toArray();
-    
-    // Сортируем по порядку в истории
-    const sortedProducts = user.viewHistory
-      .map(id => products.find(p => p.id === id))
-      .filter(Boolean);
-    
-    return sortedProducts;
-  } catch (error) {
-    console.error('Ошибка получения истории:', error);
+    console.error('Ошибка получения избранного:', error.message);
     return [];
   }
 }
 
 // ========== STATS ==========
 
-// Обновить статистику
 async function updateStats(type, data) {
   try {
     const database = await connectDB();
@@ -362,18 +350,18 @@ async function updateStats(type, data) {
         { 
           $inc: { totalUsers: 1 },
           $addToSet: { [`dailyStats.${today}.users`]: data }
-        }
+        },
+        { upsert: true }
       );
     }
     
     return true;
   } catch (error) {
-    console.error('Ошибка обновления статистики:', error);
+    console.error('Ошибка обновления статистики:', error.message);
     return false;
   }
 }
 
-// Получить статистику
 async function getStats() {
   try {
     const database = await connectDB();
@@ -385,12 +373,25 @@ async function getStats() {
       dailyStats: {}
     };
   } catch (error) {
-    console.error('Ошибка получения статистики:', error);
-    return null;
+    console.error('Ошибка получения статистики:', error.message);
+    return {
+      totalViews: 0,
+      totalUsers: 0,
+      popularProducts: {},
+      dailyStats: {}
+    };
   }
 }
 
-// Экспорт всех функций
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  if (client) {
+    await client.close();
+    console.log('👋 MongoDB подключение закрыто');
+  }
+  process.exit(0);
+});
+
 module.exports = {
   initDatabase,
   getAllProducts,
@@ -406,8 +407,6 @@ module.exports = {
   addToFavorites,
   removeFromFavorites,
   getFavorites,
-  addToHistory,
-  getHistory,
   updateStats,
   getStats
 };
