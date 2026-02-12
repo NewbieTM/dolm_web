@@ -2,7 +2,12 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
-const db = require('./database');
+// Выбор между MongoDB и JSON базой
+const USE_MONGODB = process.env.USE_MONGODB === 'true' && process.env.MONGODB_URI;
+const db = USE_MONGODB ? require('./mongodb') : require('./database');
+
+console.log('🗄️  Используется:', USE_MONGODB ? 'MongoDB' : 'JSON файлы');
+
 const bot = require('./bot'); // Импортируем бота чтобы он работал
 
 const app = express();
@@ -16,7 +21,11 @@ app.use(cors({
 app.use(express.json());
 
 // Инициализация БД при запуске
-db.initDatabase();
+db.initDatabase().then(() => {
+  console.log('✅ База данных готова к работе');
+}).catch(err => {
+  console.error('❌ Ошибка инициализации БД:', err);
+});
 
 // ========== ROUTES ==========
 
@@ -25,7 +34,18 @@ app.get('/', (req, res) => {
   res.json({ 
     status: 'ok', 
     message: 'Clothing Shop API',
-    version: '1.0.0'
+    version: '1.0.0',
+    database: USE_MONGODB ? 'MongoDB' : 'JSON'
+  });
+});
+
+// Получить конфигурацию
+app.get('/api/config', (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      managerUsername: process.env.MANAGER_USERNAME || 'manager'
+    }
   });
 });
 
@@ -128,7 +148,10 @@ app.get('/api/categories', async (req, res) => {
 app.get('/api/users/:userId/favorites', async (req, res) => {
   try {
     const { userId } = req.params;
+    console.log('GET favorites for user:', userId);
+    
     const favorites = await db.getFavorites(userId);
+    console.log('Favorites found:', favorites.length);
     
     res.json({
       success: true,
@@ -147,7 +170,10 @@ app.get('/api/users/:userId/favorites', async (req, res) => {
 app.post('/api/users/:userId/favorites/:productId', async (req, res) => {
   try {
     const { userId, productId } = req.params;
+    console.log('POST add to favorites:', { userId, productId });
+    
     const favorites = await db.addToFavorites(userId, productId);
+    console.log('Updated favorites:', favorites);
     
     res.json({
       success: true,
@@ -167,7 +193,10 @@ app.post('/api/users/:userId/favorites/:productId', async (req, res) => {
 app.delete('/api/users/:userId/favorites/:productId', async (req, res) => {
   try {
     const { userId, productId } = req.params;
+    console.log('DELETE from favorites:', { userId, productId });
+    
     const favorites = await db.removeFromFavorites(userId, productId);
+    console.log('Updated favorites:', favorites);
     
     res.json({
       success: true,
@@ -179,46 +208,6 @@ app.delete('/api/users/:userId/favorites/:productId', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Ошибка удаления из избранного'
-    });
-  }
-});
-
-// ========== HISTORY ==========
-
-// Получить историю просмотров
-app.get('/api/users/:userId/history', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const history = await db.getHistory(userId);
-    
-    res.json({
-      success: true,
-      data: history
-    });
-  } catch (error) {
-    console.error('Ошибка получения истории:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Ошибка получения истории'
-    });
-  }
-});
-
-// Добавить в историю
-app.post('/api/users/:userId/history/:productId', async (req, res) => {
-  try {
-    const { userId, productId } = req.params;
-    await db.addToHistory(userId, productId);
-    
-    res.json({
-      success: true,
-      message: 'Добавлено в историю'
-    });
-  } catch (error) {
-    console.error('Ошибка добавления в историю:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Ошибка добавления в историю'
     });
   }
 });
@@ -273,16 +262,22 @@ app.get('/api/users/:userId', async (req, res) => {
   }
 });
 
-// ========== STATS ==========
+// ========== ADMIN ENDPOINTS ==========
 
 // Получить статистику (только для админа)
-app.get('/api/stats', async (req, res) => {
+app.get('/api/admin/stats', async (req, res) => {
   try {
     const stats = await db.getStats();
+    const products = await db.getAllProducts();
+    const users = await db.getAllUsers();
     
     res.json({
       success: true,
-      data: stats
+      data: {
+        ...stats,
+        totalProducts: products.length,
+        totalUsers: users.length
+      }
     });
   } catch (error) {
     console.error('Ошибка получения статистики:', error);
@@ -293,51 +288,9 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 
-// ========== CONFIG ==========
-
-// Получить конфигурацию для фронтенда
-app.get('/api/config', (req, res) => {
-  res.json({
-    success: true,
-    data: {
-      managerUsername: process.env.MANAGER_USERNAME,
-      categories: [
-        'Обувь',
-        'Футболки',
-        'Худи',
-        'Аксессуары',
-        'Джинсы',
-        'Головные уборы'
-      ]
-    }
-  });
+// Запуск сервера
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Сервер запущен на порту ${PORT}`);
+  console.log(`📦 База данных: ${USE_MONGODB ? 'MongoDB' : 'JSON'}`);
+  console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'не указан'}`);
 });
-
-// ========== ERROR HANDLING ==========
-
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Endpoint не найден'
-  });
-});
-
-// Error handler
-app.use((error, req, res, next) => {
-  console.error('Ошибка сервера:', error);
-  res.status(500).json({
-    success: false,
-    error: 'Внутренняя ошибка сервера'
-  });
-});
-
-// ========== START SERVER ==========
-
-app.listen(PORT, () => {
-  console.log(`✅ API сервер запущен на порту ${PORT}`);
-  console.log(`📱 Frontend URL: ${process.env.FRONTEND_URL}`);
-  console.log(`🤖 Telegram бот активен`);
-});
-
-module.exports = app;

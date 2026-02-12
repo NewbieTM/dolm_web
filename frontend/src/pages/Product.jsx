@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getProduct, viewProduct, addToFavorites, removeFromFavorites, getFavorites, getConfig } from '../utils/api';
-import { getUserId, showBackButton, hideBackButton, vibrate, openTelegramLink } from '../utils/telegram';
+import ContactButton from '../components/ContactButton';
+import { getProduct, viewProduct, addToFavorites, removeFromFavorites, getFavorites } from '../utils/api';
+import { getUserId, showBackButton, hideBackButton, vibrate } from '../utils/telegram';
 
 const Product = () => {
   const { id } = useParams();
@@ -10,20 +11,20 @@ const Product = () => {
   const [loading, setLoading] = useState(true);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isFavorite, setIsFavorite] = useState(false);
-  const [managerUsername, setManagerUsername] = useState('');
   const userId = getUserId();
 
-  // ✅ НОВОЕ: Для свайпа
+  // Для свайпа
   const touchStartX = useRef(0);
   const touchEndX = useRef(0);
 
   useEffect(() => {
+    console.log('Product page mounted, id:', id, 'userId:', userId);
     loadProduct();
-    loadConfig();
     loadFavoriteStatus();
     
     // Показываем кнопку "Назад"
     showBackButton(() => {
+      console.log('Back button clicked');
       navigate(-1);
     });
 
@@ -34,7 +35,10 @@ const Product = () => {
 
   const loadProduct = async () => {
     try {
+      console.log('Loading product...');
       const response = await getProduct(id);
+      console.log('Product response:', response);
+      
       if (response.success) {
         setProduct(response.data);
         
@@ -48,24 +52,17 @@ const Product = () => {
     }
   };
 
-  const loadConfig = async () => {
-    try {
-      const response = await getConfig();
-      if (response.success) {
-        setManagerUsername(response.data.managerUsername);
-      }
-    } catch (error) {
-      console.error('Ошибка загрузки конфига:', error);
-    }
-  };
-
-  // ✅ ИСПРАВЛЕНО: Загружаем статус избранного
   const loadFavoriteStatus = async () => {
     try {
+      console.log('Loading favorite status...');
       const response = await getFavorites(userId);
+      console.log('Favorites response:', response);
+      
       if (response.success) {
         const favoriteIds = response.data.map(product => product.id);
-        setIsFavorite(favoriteIds.includes(id));
+        const isFav = favoriteIds.includes(id);
+        console.log('Is favorite:', isFav);
+        setIsFavorite(isFav);
       }
     } catch (error) {
       console.error('Ошибка загрузки избранного:', error);
@@ -74,25 +71,29 @@ const Product = () => {
 
   const handleToggleFavorite = async () => {
     vibrate('medium');
+    console.log('Toggle favorite, current state:', isFavorite);
+    
     try {
       if (isFavorite) {
-        await removeFromFavorites(userId, id);
-        setIsFavorite(false);
+        console.log('Removing from favorites...');
+        const response = await removeFromFavorites(userId, id);
+        console.log('Remove response:', response);
+        
+        if (response.success) {
+          setIsFavorite(false);
+        }
       } else {
-        await addToFavorites(userId, id);
-        setIsFavorite(true);
+        console.log('Adding to favorites...');
+        const response = await addToFavorites(userId, id);
+        console.log('Add response:', response);
+        
+        if (response.success) {
+          setIsFavorite(true);
+        }
       }
     } catch (error) {
       console.error('Ошибка с избранным:', error);
     }
-  };
-
-  const handleContactManager = () => {
-    vibrate('medium');
-    const message = encodeURIComponent(
-      `Здравствуйте! Интересует товар: ${product.name}\nЦена: ${product.price} ₽`
-    );
-    openTelegramLink(`https://t.me/${managerUsername}?text=${message}`);
   };
 
   const handleImageClick = (index) => {
@@ -100,7 +101,7 @@ const Product = () => {
     setCurrentImageIndex(index);
   };
 
-  // ✅ НОВОЕ: Обработчики свайпа
+  // Обработчики свайпа
   const handleTouchStart = (e) => {
     touchStartX.current = e.touches[0].clientX;
   };
@@ -113,7 +114,7 @@ const Product = () => {
     if (!product || product.photos.length <= 1) return;
 
     const swipeDistance = touchStartX.current - touchEndX.current;
-    const minSwipeDistance = 50; // минимальное расстояние для свайпа
+    const minSwipeDistance = 50;
 
     if (Math.abs(swipeDistance) < minSwipeDistance) return;
 
@@ -153,10 +154,10 @@ const Product = () => {
             Товар не найден
           </h2>
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate(-1)}
             className="text-accent hover:text-accent-hover"
           >
-            Вернуться в каталог
+            Вернуться назад
           </button>
         </div>
       </div>
@@ -208,18 +209,18 @@ const Product = () => {
           </svg>
         </button>
 
-        {/* Миниатюры */}
+        {/* Миниатюры - УМЕНЬШЕНЫ */}
         {product.photos.length > 1 && (
-          <div className="absolute bottom-4 left-0 right-0 px-4">
-            <div className="flex gap-2 justify-center overflow-x-auto pb-2">
+          <div className="absolute bottom-2 left-0 right-0 px-4">
+            <div className="flex gap-1.5 justify-center">
               {product.photos.map((photo, index) => (
                 <button
                   key={index}
                   onClick={() => handleImageClick(index)}
-                  className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all duration-200 ${
+                  className={`flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden border-2 transition-all duration-200 ${
                     currentImageIndex === index
-                      ? 'border-accent scale-110'
-                      : 'border-transparent opacity-60 hover:opacity-100'
+                      ? 'border-accent scale-105'
+                      : 'border-white/20 opacity-60 hover:opacity-100'
                   }`}
                 >
                   <img
@@ -260,7 +261,7 @@ const Product = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
               </svg>
-              <span>{product.views} просмотров</span>
+              <span>{product.views}</span>
             </div>
           )}
         </div>
@@ -272,18 +273,10 @@ const Product = () => {
             {product.description}
           </p>
         </div>
-
-        {/* Кнопка связи с менеджером */}
-        <button
-          onClick={handleContactManager}
-          className="w-full bg-accent hover:bg-accent-hover text-white font-semibold py-4 px-6 rounded-2xl transition-colors duration-200 flex items-center justify-center gap-2"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-          </svg>
-          Связаться с менеджером
-        </button>
       </div>
+
+      {/* Кнопка связи с менеджером */}
+      <ContactButton />
     </div>
   );
 };

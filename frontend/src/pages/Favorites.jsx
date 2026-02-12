@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ProductCard from '../components/ProductCard';
 import BottomNav from '../components/BottomNav';
+import ContactButton from '../components/ContactButton';
 import { getFavorites, removeFromFavorites } from '../utils/api';
 import { getUserId } from '../utils/telegram';
 
@@ -10,13 +11,17 @@ const Favorites = () => {
   const userId = getUserId();
 
   useEffect(() => {
+    console.log('Favorites page mounted, userId:', userId);
     loadFavorites();
   }, []);
 
   const loadFavorites = async () => {
     setLoading(true);
     try {
+      console.log('Loading favorites...');
       const response = await getFavorites(userId);
+      console.log('Favorites response:', response);
+      
       if (response.success) {
         setProducts(response.data);
       }
@@ -28,9 +33,15 @@ const Favorites = () => {
   };
 
   const handleToggleFavorite = async (productId) => {
+    console.log('Removing from favorites:', productId);
+    
     try {
-      await removeFromFavorites(userId, productId);
-      setProducts(products.filter(p => p.id !== productId));
+      const response = await removeFromFavorites(userId, productId);
+      console.log('Remove response:', response);
+      
+      if (response.success) {
+        setProducts(products.filter(p => p.id !== productId));
+      }
     } catch (error) {
       console.error('Ошибка удаления из избранного:', error);
     }
@@ -86,6 +97,9 @@ const Favorites = () => {
           </div>
         )}
       </div>
+
+      {/* Кнопка связи с менеджером */}
+      <ContactButton />
 
       {/* Нижнее меню */}
       <BottomNav />

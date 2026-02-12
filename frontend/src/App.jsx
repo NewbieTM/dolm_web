@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Routes, Route } from 'react-router-dom';
 import Catalog from './pages/Catalog';
 import Product from './pages/Product';
 import Favorites from './pages/Favorites';
@@ -10,17 +10,21 @@ function App() {
   useEffect(() => {
     // Инициализация Telegram Web App
     initTelegramApp();
+    
+    // Логирование для отладки
+    console.log('App mounted');
+    console.log('Current URL:', window.location.href);
   }, []);
 
   return (
-    <BrowserRouter>
+    // ✅ КРИТИЧНО: HashRouter вместо BrowserRouter для Telegram Mini Apps!
+    <HashRouter>
       <Routes>
         <Route path="/" element={<Catalog />} />
         <Route path="/product/:id" element={<Product />} />
         <Route path="/favorites" element={<Favorites />} />
-        {/* ✅ УБРАНО: Маршрут истории */}
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
 

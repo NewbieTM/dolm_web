@@ -3,6 +3,7 @@ import ProductCard from '../components/ProductCard';
 import CategoryFilter from '../components/CategoryFilter';
 import SearchBar from '../components/SearchBar';
 import BottomNav from '../components/BottomNav';
+import ContactButton from '../components/ContactButton';
 import { getProducts, getCategories, addToFavorites, removeFromFavorites, getFavorites } from '../utils/api';
 import { getUserId } from '../utils/telegram';
 
@@ -15,56 +16,57 @@ const Catalog = () => {
   const [favorites, setFavorites] = useState([]);
   const userId = getUserId();
 
-  // ✅ ИСПРАВЛЕНО: Загрузка избранного при инициализации
+  // Загрузка данных при монтировании
   useEffect(() => {
+    console.log('Catalog mounted, userId:', userId);
     loadInitialData();
   }, []);
 
   // Загрузка товаров при изменении фильтров
   useEffect(() => {
-    loadProducts();
+    if (!loading) { // Не загружаем снова если идёт начальная загрузка
+      loadProducts();
+    }
   }, [activeCategory, searchQuery]);
 
   const loadInitialData = async () => {
     try {
-      // Загружаем категории и избранное одновременно
-      await Promise.all([
-        loadCategories(),
-        loadFavorites()
+      console.log('Loading initial data...');
+      // Загружаем всё параллельно
+      const [categoriesRes, favoritesRes, productsRes] = await Promise.all([
+        getCategories(),
+        getFavorites(userId),
+        getProducts({ sort: 'new' })
       ]);
-    } catch (error) {
-      console.error('Ошибка загрузки начальных данных:', error);
-    }
-  };
 
-  const loadCategories = async () => {
-    try {
-      const response = await getCategories();
-      if (response.success) {
-        setCategories(response.data);
+      console.log('Categories loaded:', categoriesRes);
+      console.log('Favorites loaded:', favoritesRes);
+      console.log('Products loaded:', productsRes);
+
+      if (categoriesRes.success) {
+        setCategories(categoriesRes.data);
       }
-    } catch (error) {
-      console.error('Ошибка загрузки категорий:', error);
-    }
-  };
 
-  // ✅ ИСПРАВЛЕНО: Новая функция для загрузки избранного
-  const loadFavorites = async () => {
-    try {
-      const response = await getFavorites(userId);
-      if (response.success) {
+      if (favoritesRes.success) {
         // Сохраняем только ID товаров
-        const favoriteIds = response.data.map(product => product.id);
+        const favoriteIds = favoritesRes.data.map(product => product.id);
+        console.log('Favorite IDs:', favoriteIds);
         setFavorites(favoriteIds);
       }
+
+      if (productsRes.success) {
+        setProducts(productsRes.data);
+      }
     } catch (error) {
-      console.error('Ошибка загрузки избранного:', error);
+      console.error('Ошибка загрузки начальных данных:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
   const loadProducts = async () => {
-    setLoading(true);
     try {
+      console.log('Loading products with filters:', { activeCategory, searchQuery });
       const response = await getProducts({
         category: activeCategory,
         search: searchQuery,
@@ -72,31 +74,46 @@ const Catalog = () => {
       });
 
       if (response.success) {
+        console.log('Products loaded:', response.data.length);
         setProducts(response.data);
       }
     } catch (error) {
       console.error('Ошибка загрузки товаров:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
   const handleCategoryChange = (category) => {
+    console.log('Category changed:', category);
     setActiveCategory(category);
   };
 
   const handleSearch = useCallback((query) => {
+    console.log('Search query:', query);
     setSearchQuery(query);
   }, []);
 
   const handleToggleFavorite = async (productId) => {
+    console.log('Toggle favorite:', productId, 'Current favorites:', favorites);
+    
     try {
-      if (favorites.includes(productId)) {
-        await removeFromFavorites(userId, productId);
-        setFavorites(favorites.filter(id => id !== productId));
+      const isFav = favorites.includes(productId);
+      
+      if (isFav) {
+        console.log('Removing from favorites...');
+        const response = await removeFromFavorites(userId, productId);
+        console.log('Remove response:', response);
+        
+        if (response.success) {
+          setFavorites(favorites.filter(id => id !== productId));
+        }
       } else {
-        await addToFavorites(userId, productId);
-        setFavorites([...favorites, productId]);
+        console.log('Adding to favorites...');
+        const response = await addToFavorites(userId, productId);
+        console.log('Add response:', response);
+        
+        if (response.success) {
+          setFavorites([...favorites, productId]);
+        }
       }
     } catch (error) {
       console.error('Ошибка с избранным:', error);
@@ -159,6 +176,9 @@ const Catalog = () => {
           </div>
         )}
       </div>
+
+      {/* Кнопка связи с менеджером */}
+      <ContactButton />
 
       {/* Нижнее меню */}
       <BottomNav />
