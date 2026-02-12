@@ -9,14 +9,23 @@ const ContactButton = ({ productName, productPrice }) => {
   useEffect(() => {
     loadConfig();
     
-    // Показываем подсказку через 2 секунды после загрузки
+    // Показываем подсказку через 3 секунды после загрузки
     const tooltipTimer = setTimeout(() => {
       setShowTooltip(true);
-      // Скрываем через 5 секунд
-      setTimeout(() => setShowTooltip(false), 5000);
-    }, 2000);
+      // Скрываем через 4 секунды
+      setTimeout(() => setShowTooltip(false), 4000);
+    }, 3000);
 
-    return () => clearTimeout(tooltipTimer);
+    // Показываем подсказку каждые 30 секунд
+    const intervalTimer = setInterval(() => {
+      setShowTooltip(true);
+      setTimeout(() => setShowTooltip(false), 4000);
+    }, 30000);
+
+    return () => {
+      clearTimeout(tooltipTimer);
+      clearInterval(intervalTimer);
+    };
   }, []);
 
   const loadConfig = async () => {
@@ -52,25 +61,23 @@ const ContactButton = ({ productName, productPrice }) => {
 
   return (
     <div className="fixed bottom-20 right-4 z-40">
-      {/* Подсказка */}
+      {/* Подсказка - только периодически, БЕЗ hover */}
       {showTooltip && (
-        <div className="absolute bottom-full right-0 mb-2 animate-fade-in">
-          <div className="bg-gray-900 text-white text-xs px-3 py-2 rounded-lg shadow-lg whitespace-nowrap">
-            Оформить заказ
+        <div className="absolute bottom-full right-0 mb-2 animate-fade-in pointer-events-none">
+          <div className="bg-gray-900 text-white text-sm px-4 py-2 rounded-lg shadow-xl whitespace-nowrap">
+            Оформить свой заказ
             <div className="absolute bottom-0 right-4 transform translate-y-1/2 rotate-45 w-2 h-2 bg-gray-900"></div>
           </div>
         </div>
       )}
 
-      {/* Кнопка */}
+      {/* Кнопка БЕЗ группы и hover подсказок */}
       <button
         onClick={handleClick}
-        className="w-14 h-14 bg-accent hover:bg-accent-hover rounded-full shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95 group"
+        className="w-14 h-14 bg-accent hover:bg-accent-hover rounded-full shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95"
         aria-label="Оформить заказ"
-        onMouseEnter={() => setShowTooltip(true)}
-        onMouseLeave={() => setShowTooltip(false)}
       >
-        {/* Иконка корзины с чеком */}
+        {/* Иконка корзины */}
         <svg 
           className="w-7 h-7 text-white" 
           fill="none" 
@@ -87,11 +94,6 @@ const ContactButton = ({ productName, productPrice }) => {
         
         {/* Пульсирующий эффект */}
         <span className="absolute inset-0 rounded-full bg-accent animate-ping opacity-20"></span>
-        
-        {/* Текстовая подсказка внутри кнопки (при hover) */}
-        <span className="absolute -top-8 right-0 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none">
-          Заказать
-        </span>
       </button>
     </div>
   );
