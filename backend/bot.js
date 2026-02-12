@@ -390,4 +390,317 @@ bot.onText(/\/stats/, async (msg) => {
   }
 });
 
+// Добавить эти команды и обработчики в bot.js
+
+// ========== ДОПОЛНЕНИЕ К СУЩЕСТВУЮЩЕМУ КОДУ ==========
+
+// Хранилище для данных редактирования товаров
+const tempEditData = {};
+
+// Команда /edit_product - редактирование товара
+bot.onText(/\/edit_product (.+)/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  const productId = match[1];
+  
+  if (userId !== ADMIN_ID) {
+    await bot.sendMessage(chatId, '❌ У вас нет доступа');
+    return;
+  }
+  
+  try {
+    const product = await db.getProductById(productId);
+    
+    if (!product) {
+      await bot.sendMessage(chatId, `❌ Товар с ID ${productId} не найден`);
+      return;
+    }
+    
+    // Сохраняем товар для редактирования
+    tempEditData[chatId] = {
+      productId: productId,
+      originalProduct: product
+    };
+    
+    // Показываем меню редактирования
+    await bot.sendMessage(chatId, `
+📝 Редактирование товара
+
+Текущие данные:
+━━━━━━━━━━━━━━
+📌 Название: ${product.name}
+💰 Цена: ${product.price} ₽
+📝 Описание: ${product.description}
+🏷️ Категория: ${product.category}
+📸 Фото: ${product.photos.length} шт.
+━━━━━━━━━━━━━━
+
+Что хотите изменить?
+    `, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '📌 Название', callback_data: 'edit_name' }],
+          [{ text: '💰 Цена', callback_data: 'edit_price' }],
+          [{ text: '📝 Описание', callback_data: 'edit_description' }],
+          [{ text: '🏷️ Категория', callback_data: 'edit_category' }],
+          [{ text: '📸 Фото', callback_data: 'edit_photos' }],
+          [{ text: '✅ Завершить', callback_data: 'edit_done' }],
+          [{ text: '❌ Отмена', callback_data: 'edit_cancel' }]
+        ]
+      }
+    });
+  } catch (error) {
+    console.error('Ошибка при получении товара:', error);
+    await bot.sendMessage(chatId, '❌ Ошибка при загрузке товара');
+  }
+});
+
+// Обработка callback для редактирования
+bot.on('callback_query', async (query) => {
+  const chatId = query.message.chat.id;
+  const userId = query.from.id;
+  const editData = tempEditData[chatId];
+  
+  if (userId !== ADMIN_ID) {
+    await bot.answerCallbackQuery(query.id, { text: '❌ Ошибка доступа' });
+    return;
+  }
+  
+  // Обработка выбора категории при добавлении
+  if (query.data.startsWith('cat_') && tempProductData[chatId]) {
+    const category = query.data.replace('cat_', '');
+    tempProductData[chatId].category = category;
+    tempProductData[chatId].step = 'photo';
+    tempProductData[chatId].photos = [];
+    
+    await bot.answerCallbackQuery(query.id, { text: `Выбрана категория: ${category}` });
+    await bot.sendMessage(chatId, `
+📸 Отправьте фото товара (можно несколько).
+
+Когда закончите, отправьте команду /done
+    `);
+    return;
+  }
+  
+  // Обработка редактирования
+  if (!editData) {
+    await bot.answerCallbackQuery(query.id, { text: '❌ Сессия редактирования не найдена' });
+    return;
+  }
+  
+  switch (query.data) {
+    case 'edit_name':
+      editData.editing = 'name';
+      await bot.answerCallbackQuery(query.id);
+      await bot.sendMessage(chatId, '📌 Введите новое название товара:');
+      break;
+      
+    case 'edit_price':
+      editData.editing = 'price';
+      await bot.answerCallbackQuery(query.id);
+      await bot.sendMessage(chatId, '💰 Введите новую цену (только число):');
+      break;
+      
+    case 'edit_description':
+      editData.editing = 'description';
+      await bot.answerCallbackQuery(query.id);
+      await bot.sendMessage(chatId, '📝 Введите новое описание:');
+      break;
+      
+    case 'edit_category':
+      editData.editing = 'category';
+      await bot.answerCallbackQuery(query.id);
+      await bot.sendMessage(chatId, '🏷️ Выберите новую категорию:', {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '👟 Обувь', callback_data: 'editcat_Обувь' }],
+            [{ text: '👕 Худи', callback_data: 'editcat_Худи' }],
+            [{ text: '👔 Футболки', callback_data: 'editcat_Футболки' }],
+            [{ text: '🎒 Аксессуары', callback_data: 'editcat_Аксессуары' }]
+          ]
+        }
+      });
+      break;
+      
+    case 'edit_photos':
+      editData.editing = 'photos';
+      editData.newPhotos = [];
+      await bot.answerCallbackQuery(query.id);
+      await bot.sendMessage(chatId, `
+📸 Отправьте новые фото товара (заменят старые).
+
+Когда закончите, отправьте /done_photos
+      `);
+      break;
+      
+    case 'edit_done':
+      await bot.answerCallbackQuery(query.id, { text: 'Сохраняем изменения...' });
+      try {
+        const product = editData.originalProduct;
+        const success = await db.updateProduct(editData.productId, product);
+        
+        if (success) {
+          await bot.sendMessage(chatId, `
+✅ Товар успешно обновлен!
+
+ID: ${editData.productId}
+Название: ${product.name}
+Цена: ${product.price} ₽
+Категория: ${product.category}
+          `);
+        } else {
+          await bot.sendMessage(chatId, '❌ Ошибка при сохранении изменений');
+        }
+      } catch (error) {
+        console.error('Ошибка обновления товара:', error);
+        await bot.sendMessage(chatId, '❌ Ошибка при сохранении');
+      }
+      delete tempEditData[chatId];
+      break;
+      
+    case 'edit_cancel':
+      await bot.answerCallbackQuery(query.id, { text: 'Отменено' });
+      await bot.sendMessage(chatId, '❌ Редактирование отменено');
+      delete tempEditData[chatId];
+      break;
+  }
+  
+  // Обработка выбора новой категории
+  if (query.data.startsWith('editcat_')) {
+    const category = query.data.replace('editcat_', '');
+    editData.originalProduct.category = category;
+    delete editData.editing;
+    
+    await bot.answerCallbackQuery(query.id, { text: `Категория изменена на: ${category}` });
+    await bot.sendMessage(chatId, `✅ Категория изменена на: ${category}\n\nОтправьте /edit_product ${editData.productId} для продолжения редактирования`);
+  }
+});
+
+// Обработка текстовых сообщений при редактировании
+bot.on('message', async (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  const text = msg.text;
+  
+  if (userId !== ADMIN_ID) return;
+  
+  // Обработка редактирования
+  const editData = tempEditData[chatId];
+  if (editData && editData.editing && text && !text.startsWith('/')) {
+    const product = editData.originalProduct;
+    
+    switch (editData.editing) {
+      case 'name':
+        product.name = text;
+        await bot.sendMessage(chatId, `✅ Название изменено на: ${text}\n\nОтправьте /edit_product ${editData.productId} для продолжения`);
+        delete editData.editing;
+        break;
+        
+      case 'price':
+        const price = parseFloat(text);
+        if (isNaN(price) || price <= 0) {
+          await bot.sendMessage(chatId, '❌ Неправильная цена. Введите число:');
+          return;
+        }
+        product.price = price;
+        await bot.sendMessage(chatId, `✅ Цена изменена на: ${price} ₽\n\nОтправьте /edit_product ${editData.productId} для продолжения`);
+        delete editData.editing;
+        break;
+        
+      case 'description':
+        product.description = text;
+        await bot.sendMessage(chatId, `✅ Описание изменено\n\nОтправьте /edit_product ${editData.productId} для продолжения`);
+        delete editData.editing;
+        break;
+    }
+    return;
+  }
+  
+  // Остальная логика обработки сообщений (добавление товара)...
+});
+
+// Обработка фото при редактировании
+bot.on('photo', async (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  
+  if (userId !== ADMIN_ID) return;
+  
+  const editData = tempEditData[chatId];
+  
+  // Если редактируем фото
+  if (editData && editData.editing === 'photos') {
+    try {
+      const photo = msg.photo[msg.photo.length - 1];
+      const fileId = photo.file_id;
+      
+      await bot.sendMessage(chatId, '⏳ Загружаем фото...');
+      
+      const photoUrl = await uploadTelegramPhoto(bot, fileId);
+      
+      if (photoUrl) {
+        editData.newPhotos.push(photoUrl);
+        await bot.sendMessage(chatId, `✅ Фото добавлено (${editData.newPhotos.length})\n\nОтправьте /done_photos когда закончите`);
+      } else {
+        await bot.sendMessage(chatId, '❌ Ошибка загрузки фото');
+      }
+    } catch (error) {
+      console.error('Ошибка загрузки фото:', error);
+      await bot.sendMessage(chatId, '❌ Ошибка загрузки фото');
+    }
+    return;
+  }
+  
+  // Остальная логика для добавления товара...
+});
+
+// Команда /done_photos - завершение редактирования фото
+bot.onText(/\/done_photos/, async (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  const editData = tempEditData[chatId];
+  
+  if (userId !== ADMIN_ID || !editData || editData.editing !== 'photos') {
+    return;
+  }
+  
+  if (editData.newPhotos.length === 0) {
+    await bot.sendMessage(chatId, '❌ Добавьте хотя бы одно фото');
+    return;
+  }
+  
+  editData.originalProduct.photos = editData.newPhotos;
+  delete editData.editing;
+  delete editData.newPhotos;
+  
+  await bot.sendMessage(chatId, `✅ Фото обновлены (${editData.originalProduct.photos.length} шт.)\n\nОтправьте /edit_product ${editData.productId} для продолжения`);
+});
+
+// ОБНОВИТЬ МЕНЮ АДМИНА
+// Заменить команду /admin на эту версию:
+bot.onText(/\/admin/, async (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  
+  if (userId !== ADMIN_ID) {
+    await bot.sendMessage(chatId, '❌ У вас нет доступа к админ-панели');
+    return;
+  }
+  
+  const adminMenu = `
+🔧 Админ-панель
+
+Доступные команды:
+/add_product - Добавить товар
+/edit_product [ID] - Редактировать товар
+/list_products - Список товаров
+/delete_product [ID] - Удалить товар
+/stats - Статистика
+  `;
+  
+  await bot.sendMessage(chatId, adminMenu);
+});
+
+
+
 module.exports = bot;

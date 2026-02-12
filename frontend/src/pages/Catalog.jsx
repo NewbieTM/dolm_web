@@ -24,7 +24,7 @@ const Catalog = () => {
 
   // Загрузка товаров при изменении фильтров
   useEffect(() => {
-    if (!loading) { // Не загружаем снова если идёт начальная загрузка
+    if (!loading) {
       loadProducts();
     }
   }, [activeCategory, searchQuery]);
@@ -32,23 +32,21 @@ const Catalog = () => {
   const loadInitialData = async () => {
     try {
       console.log('Loading initial data...');
-      // Загружаем всё параллельно
       const [categoriesRes, favoritesRes, productsRes] = await Promise.all([
         getCategories(),
         getFavorites(userId),
         getProducts({ sort: 'new' })
       ]);
 
-      console.log('Categories loaded:', categoriesRes);
-      console.log('Favorites loaded:', favoritesRes);
-      console.log('Products loaded:', productsRes);
+      console.log('Categories:', categoriesRes);
+      console.log('Favorites:', favoritesRes);
+      console.log('Products:', productsRes);
 
       if (categoriesRes.success) {
         setCategories(categoriesRes.data);
       }
 
       if (favoritesRes.success) {
-        // Сохраняем только ID товаров
         const favoriteIds = favoritesRes.data.map(product => product.id);
         console.log('Favorite IDs:', favoriteIds);
         setFavorites(favoriteIds);
@@ -58,7 +56,7 @@ const Catalog = () => {
         setProducts(productsRes.data);
       }
     } catch (error) {
-      console.error('Ошибка загрузки начальных данных:', error);
+      console.error('Ошибка начальной загрузки:', error);
     } finally {
       setLoading(false);
     }
@@ -66,15 +64,16 @@ const Catalog = () => {
 
   const loadProducts = async () => {
     try {
-      console.log('Loading products with filters:', { activeCategory, searchQuery });
-      const response = await getProducts({
-        category: activeCategory,
-        search: searchQuery,
-        sort: 'new'
-      });
+      const params = {
+        sort: 'new',
+        ...(activeCategory && { category: activeCategory }),
+        ...(searchQuery && { search: searchQuery })
+      };
+
+      console.log('Loading products with params:', params);
+      const response = await getProducts(params);
 
       if (response.success) {
-        console.log('Products loaded:', response.data.length);
         setProducts(response.data);
       }
     } catch (error) {
@@ -87,10 +86,10 @@ const Catalog = () => {
     setActiveCategory(category);
   };
 
-  const handleSearch = useCallback((query) => {
+  const handleSearch = (query) => {
     console.log('Search query:', query);
     setSearchQuery(query);
-  }, []);
+  };
 
   const handleToggleFavorite = async (productId) => {
     console.log('Toggle favorite:', productId, 'Current favorites:', favorites);
@@ -124,57 +123,67 @@ const Catalog = () => {
     <div className="min-h-screen bg-dark-bg pb-20">
       {/* Заголовок */}
       <header className="sticky top-0 z-20 bg-dark-bg/95 backdrop-blur-lg border-b border-gray-800">
-        <div className="px-4 py-4">
+        {/* Ограничиваем ширину на больших экранах */}
+        <div className="max-w-7xl mx-auto px-4 py-4">
           <h1 className="text-2xl font-bold text-white mb-4">Каталог</h1>
           <SearchBar onSearch={handleSearch} />
         </div>
       </header>
 
-      {/* Фильтр категорий */}
-      <div className="px-4 pt-4">
-        <CategoryFilter
-          categories={categories}
-          activeCategory={activeCategory}
-          onCategoryChange={handleCategoryChange}
-        />
-      </div>
+      {/* Контент с ограничением ширины */}
+      <div className="max-w-7xl mx-auto">
+        {/* Фильтр категорий */}
+        <div className="px-4 pt-4">
+          <CategoryFilter
+            categories={categories}
+            activeCategory={activeCategory}
+            onCategoryChange={handleCategoryChange}
+          />
+        </div>
 
-      {/* Товары */}
-      <div className="px-4 pt-4">
-        {loading ? (
-          <div className="grid grid-cols-2 gap-4">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="bg-dark-card rounded-2xl overflow-hidden">
-                <div className="aspect-square skeleton" />
-                <div className="p-4 space-y-2">
-                  <div className="h-4 skeleton rounded" />
-                  <div className="h-6 skeleton rounded w-1/2" />
+        {/* Товары - адаптивная сетка */}
+        <div className="px-4 pt-4">
+          {loading ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="bg-dark-card rounded-2xl overflow-hidden">
+                  <div className="aspect-square skeleton" />
+                  <div className="p-4 space-y-2">
+                    <div className="h-4 skeleton rounded" />
+                    <div className="h-6 skeleton rounded w-1/2" />
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        ) : products.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="text-6xl mb-4">🔍</div>
-            <h3 className="text-xl font-semibold text-white mb-2">
-              Товары не найдены
-            </h3>
-            <p className="text-gray-400">
-              Попробуйте изменить фильтры или поисковый запрос
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-4">
-            {products.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                isFavorite={favorites.includes(product.id)}
-                onToggleFavorite={handleToggleFavorite}
-              />
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          ) : products.length === 0 ? (
+            <div className="text-center py-16">
+              <div className="text-6xl mb-4">🔍</div>
+              <h3 className="text-xl font-semibold text-white mb-2">
+                Товары не найдены
+              </h3>
+              <p className="text-gray-400">
+                Попробуйте изменить фильтры или поисковый запрос
+              </p>
+            </div>
+          ) : (
+            /* Адаптивная сетка:
+               - Мобильные: 2 колонки
+               - Планшеты (md): 3 колонки
+               - Ноутбуки (lg): 4 колонки
+               - Десктопы (xl): 5 колонок
+            */
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              {products.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  isFavorite={favorites.includes(product.id)}
+                  onToggleFavorite={handleToggleFavorite}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Кнопка связи с менеджером */}

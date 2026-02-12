@@ -209,7 +209,7 @@ const Product = () => {
           </svg>
         </button>
 
-        {/* Миниатюры - УМЕНЬШЕНЫ */}
+        {/* Миниатюры */}
         {product.photos.length > 1 && (
           <div className="absolute bottom-2 left-0 right-0 px-4">
             <div className="flex gap-1.5 justify-center">
@@ -275,8 +275,11 @@ const Product = () => {
         </div>
       </div>
 
-      {/* Кнопка связи с менеджером */}
-      <ContactButton />
+      {/* Кнопка связи с менеджером - ПЕРЕДАЕМ ДАННЫЕ */}
+      <ContactButton 
+        productName={product.name}
+        productPrice={product.price}
+      />
     </div>
   );
 };

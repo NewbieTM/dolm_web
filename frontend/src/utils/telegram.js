@@ -1,14 +1,27 @@
 // Telegram Web App SDK
 const tg = typeof window !== 'undefined' ? window.Telegram?.WebApp : undefined;
 
-// Константа для тестового пользователя
-const TEST_USER_ID = 'test_user_stable';
+// Генерируем уникальный ID для dev режима
+function generateDevUserId() {
+  let userId = localStorage.getItem('dev_user_id');
+  
+  if (!userId) {
+    // Создаём уникальный ID на основе времени и случайного числа
+    userId = `dev_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    localStorage.setItem('dev_user_id', userId);
+    console.log('🆔 Создан новый уникальный dev user ID:', userId);
+  } else {
+    console.log('🆔 Загружен существующий dev user ID:', userId);
+  }
+  
+  return userId;
+}
 
 // Инициализация приложения
 export function initTelegramApp() {
   if (!tg) {
     console.warn('⚠️  Telegram WebApp SDK не найден');
-    console.log('Работаем в режиме разработки');
+    console.log('Работаем в режиме разработки с уникальным пользователем');
     return null;
   }
 
@@ -46,32 +59,22 @@ export function initTelegramApp() {
 
 // Получить стабильный ID пользователя
 export function getUserId() {
-  // В Telegram Mini App
+  // В Telegram Mini App - используем реальный ID
   if (tg?.initDataUnsafe?.user?.id) {
     const id = tg.initDataUnsafe.user.id.toString();
     console.log('🆔 Telegram User ID:', id);
     return id;
   }
   
-  // Для обычного браузера (не Telegram) - используем localStorage для стабильности
+  // Для обычного браузера (не Telegram) - генерируем УНИКАЛЬНЫЙ ID
   if (typeof window !== 'undefined' && window.localStorage) {
-    let storedId = localStorage.getItem('dev_user_id');
-    
-    if (!storedId) {
-      // Создаём стабильный ID только один раз
-      storedId = TEST_USER_ID;
-      localStorage.setItem('dev_user_id', storedId);
-      console.log('🆔 Создан новый dev user ID:', storedId);
-    } else {
-      console.log('🆔 Загружен dev user ID:', storedId);
-    }
-    
-    return storedId;
+    const devId = generateDevUserId();
+    return devId;
   }
   
-  // Fallback - но это не должно использоваться
+  // Fallback - генерируем временный ID
   console.warn('⚠️  Используется fallback ID');
-  return TEST_USER_ID;
+  return `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
 // Получить данные пользователя
@@ -81,8 +84,9 @@ export function getUserData() {
   }
   
   // Для разработки
+  const devId = getUserId();
   return {
-    id: getUserId(),
+    id: devId,
     first_name: 'Test',
     last_name: 'User',
     username: 'testuser',
