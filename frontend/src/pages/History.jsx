@@ -1,41 +1,59 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ProductCard from '../components/ProductCard';
 import BottomNav from '../components/BottomNav';
-import { getHistory, addToFavorites, removeFromFavorites } from '../utils/api';
-import { getUserId } from '../utils/telegram';
+import { getHistory, addToFavorites, removeFromFavorites, getFavorites } from '../utils/api';
+import { getUserId, vibrate } from '../utils/telegram';
 
 const History = () => {
+  const navigate = useNavigate();
   const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [favorites, setFavorites] = useState([]);
+  const [loading, setLoading] = useState(true);
   const userId = getUserId();
 
   useEffect(() => {
-    loadHistory();
+    loadData();
   }, []);
 
-  const loadHistory = async () => {
-    setLoading(true);
+  const loadData = async () => {
     try {
-      const response = await getHistory(userId);
-      if (response.success) {
-        setProducts(response.data);
+      const [historyRes, favoritesRes] = await Promise.all([
+        getHistory(userId),
+        getFavorites(userId)
+      ]);
+
+      if (historyRes.success) {
+        setProducts(historyRes.data);
+      }
+
+      if (favoritesRes.success) {
+        const favoriteIds = favoritesRes.data.map(product => product.id);
+        setFavorites(favoriteIds);
       }
     } catch (error) {
-      console.error('Ошибка загрузки истории:', error);
+      console.error('Ошибка загрузки данных:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const handleToggleFavorite = async (productId) => {
+    vibrate('light');
+    
     try {
-      if (favorites.includes(productId)) {
-        await removeFromFavorites(userId, productId);
-        setFavorites(favorites.filter(id => id !== productId));
+      const isFav = favorites.includes(productId);
+      
+      if (isFav) {
+        const response = await removeFromFavorites(userId, productId);
+        if (response.success) {
+          setFavorites(favorites.filter(id => id !== productId));
+        }
       } else {
-        await addToFavorites(userId, productId);
-        setFavorites([...favorites, productId]);
+        const response = await addToFavorites(userId, productId);
+        if (response.success) {
+          setFavorites([...favorites, productId]);
+        }
       }
     } catch (error) {
       console.error('Ошибка с избранным:', error);
@@ -46,16 +64,18 @@ const History = () => {
     <div className="min-h-screen bg-dark-bg pb-20">
       {/* Заголовок */}
       <header className="sticky top-0 z-20 bg-dark-bg/95 backdrop-blur-lg border-b border-gray-800">
-        <div className="px-4 py-4">
+        {/* Ограничиваем ширину на больших экранах */}
+        <div className="max-w-7xl mx-auto px-4 py-4">
           <h1 className="text-2xl font-bold text-white">История просмотров</h1>
         </div>
       </header>
 
-      {/* Товары */}
-      <div className="px-4 pt-4">
+      {/* Контент с ограничением ширины */}
+      <div className="max-w-7xl mx-auto px-4 pt-6">
         {loading ? (
-          <div className="grid grid-cols-2 gap-4">
-            {[...Array(4)].map((_, i) => (
+          /* Адаптивная сетка скелетонов */
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {[...Array(8)].map((_, i) => (
               <div key={i} className="bg-dark-card rounded-2xl overflow-hidden">
                 <div className="aspect-square skeleton" />
                 <div className="p-4 space-y-2">
@@ -80,7 +100,13 @@ const History = () => {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-4">
+          /* Адаптивная сетка:
+             - Мобильные: 2 колонки
+             - Планшеты (md): 3 колонки
+             - Ноутбуки (lg): 4 колонки
+             - Десктопы (xl): 5 колонок
+          */
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {products.map((product) => (
               <ProductCard
                 key={product.id}

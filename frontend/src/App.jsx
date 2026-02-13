@@ -1,62 +1,35 @@
-import React, { useEffect, useState } from 'react';
-import { HashRouter, Routes, Route } from 'react-router-dom';
+import { useEffect } from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { initTelegramApp } from './utils/telegram';
 import Catalog from './pages/Catalog';
 import Product from './pages/Product';
 import Favorites from './pages/Favorites';
-import { initTelegramApp, isRunningInTelegram } from './utils/telegram';
-import './index.css';
+import History from './pages/History';
 
 function App() {
-  const [isReady, setIsReady] = useState(false);
-  const [error, setError] = useState(null);
-
+  // КРИТИЧЕСКИ ВАЖНО: Инициализация Telegram WebApp при загрузке приложения
   useEffect(() => {
-    console.log('📱 App mounting...');
-    console.log('🌐 URL:', window.location.href);
-    console.log('📦 Telegram available:', !!window.Telegram?.WebApp);
+    console.log('🚀 Запуск приложения...');
     
     try {
-      // Инициализируем Telegram WebApp
-      initTelegramApp();
-      
-      // Проверяем что всё работает
-      console.log('✅ App инициализирован');
-      console.log('📱 В Telegram:', isRunningInTelegram());
-      
-      setIsReady(true);
-    } catch (err) {
-      console.error('❌ Ошибка инициализации App:', err);
-      setError(err.message);
-      // Всё равно показываем приложение
-      setIsReady(true);
+      const tg = initTelegramApp();
+      console.log('✅ Telegram WebApp инициализирован:', tg);
+      console.log('Платформа:', tg?.platform || 'unknown');
+      console.log('User ID:', tg?.initDataUnsafe?.user?.id || 'test');
+    } catch (error) {
+      console.error('❌ Ошибка инициализации Telegram WebApp:', error);
     }
   }, []);
 
-  // Показываем loader пока не готово
-  if (!isReady) {
-    return (
-      <div className="min-h-screen bg-dark-bg flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-accent border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-white text-lg">Загрузка...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Показываем ошибку если что-то пошло не так
-  if (error) {
-    console.error('⚠️  Приложение запущено с ошибками:', error);
-  }
-
   return (
-    <HashRouter>
+    <BrowserRouter>
       <Routes>
         <Route path="/" element={<Catalog />} />
         <Route path="/product/:id" element={<Product />} />
         <Route path="/favorites" element={<Favorites />} />
+        <Route path="/history" element={<History />} />
       </Routes>
-    </HashRouter>
+    </BrowserRouter>
   );
 }
 
