@@ -1,31 +1,42 @@
 import React from 'react';
+import { vibrate } from '../utils/telegram';
 
 const CategoryFilter = ({ categories, activeCategory, onCategoryChange }) => {
+  const handleCategoryClick = (category) => {
+    vibrate('light');
+    onCategoryChange(category);
+  };
+
   return (
-    <div className="flex gap-2 overflow-x-auto pb-2">
-      <button
-        onClick={() => onCategoryChange('')}
-        className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all ${
-          activeCategory === ''
-            ? 'bg-accent text-white'
-            : 'bg-dark-card text-gray-300 hover:bg-dark-hover'
-        }`}
-      >
-        Все
-      </button>
-      {categories.map((category) => (
+    <div className="sticky top-0 z-10 bg-dark-bg/95 backdrop-blur-lg pb-4">
+      <div className="flex gap-2 overflow-x-auto scrollbar-hide py-2 px-1">
+        {/* Кнопка "Все" */}
         <button
-          key={category}
-          onClick={() => onCategoryChange(category)}
-          className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all ${
-            activeCategory === category
+          onClick={() => handleCategoryClick(null)}
+          className={`px-4 py-2 rounded-full whitespace-nowrap font-medium transition-all duration-200 flex-shrink-0 ${
+            activeCategory === null
               ? 'bg-accent text-white'
-              : 'bg-dark-card text-gray-300 hover:bg-dark-hover'
+              : 'bg-dark-card text-gray-400 hover:bg-dark-hover'
           }`}
         >
-          {category}
+          Все
         </button>
-      ))}
+
+        {/* Категории */}
+        {categories.map((category) => (
+          <button
+            key={category}
+            onClick={() => handleCategoryClick(category)}
+            className={`px-4 py-2 rounded-full whitespace-nowrap font-medium transition-all duration-200 flex-shrink-0 ${
+              activeCategory === category
+                ? 'bg-accent text-white'
+                : 'bg-dark-card text-gray-400 hover:bg-dark-hover'
+            }`}
+          >
+            {category}
+          </button>
+        ))}
+      </div>
     </div>
   );
 };

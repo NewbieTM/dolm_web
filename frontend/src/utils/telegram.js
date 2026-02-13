@@ -1,56 +1,80 @@
 // Telegram Web App SDK
 const tg = typeof window !== 'undefined' ? window.Telegram?.WebApp : undefined;
 
-// Генерируем уникальный ID для каждого браузера/устройства
+// Генерируем уникальный ID для dev режима
 function generateDevUserId() {
   let userId = localStorage.getItem('dev_user_id');
   
   if (!userId) {
+    // Создаём уникальный ID на основе времени и случайного числа
     userId = `dev_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     localStorage.setItem('dev_user_id', userId);
-    console.log('🆔 Создан dev user ID:', userId);
+    console.log('🆔 Создан новый уникальный dev user ID:', userId);
   } else {
-    console.log('🆔 Загружен dev user ID:', userId);
+    console.log('🆔 Загружен существующий dev user ID:', userId);
   }
   
   return userId;
 }
 
-// Инициализация
+// Инициализация приложения
 export function initTelegramApp() {
   if (!tg) {
-    console.warn('⚠️ Telegram WebApp SDK не найден, работаем в dev режиме');
+    console.warn('⚠️  Telegram WebApp SDK не найден');
+    console.log('Работаем в режиме разработки с уникальным пользователем');
     return null;
   }
 
   try {
+    console.log('🔧 Инициализация Telegram WebApp...');
+    
+    // ВАЖНО: Готовим приложение
     tg.ready();
     
-    if (tg.expand) tg.expand();
-    if (tg.setHeaderColor) tg.setHeaderColor('#0F0F0F');
-    if (tg.setBackgroundColor) tg.setBackgroundColor('#0F0F0F');
+    // Разворачиваем на весь экран
+    if (tg.expand) {
+      tg.expand();
+    }
+
+    // Устанавливаем цвета
+    if (tg.setHeaderColor) {
+      tg.setHeaderColor('#0F0F0F');
+    }
+    if (tg.setBackgroundColor) {
+      tg.setBackgroundColor('#0F0F0F');
+    }
 
     console.log('✅ Telegram WebApp готов');
+    console.log('📱 Platform:', tg.platform);
     console.log('🆔 User ID:', getUserId());
+    console.log('👤 User:', getUserData());
+    console.log('🔗 Init Data:', tg.initData ? 'присутствует' : 'отсутствует');
     
     return tg;
   } catch (error) {
-    console.error('❌ Ошибка Telegram WebApp:', error);
+    console.error('❌ Ошибка инициализации Telegram WebApp:', error);
     return null;
   }
 }
 
-// Получить ID пользователя
+// Получить стабильный ID пользователя
 export function getUserId() {
+  // В Telegram Mini App - используем реальный ID
   if (tg?.initDataUnsafe?.user?.id) {
-    return tg.initDataUnsafe.user.id.toString();
+    const id = tg.initDataUnsafe.user.id.toString();
+    console.log('🆔 Telegram User ID:', id);
+    return id;
   }
   
+  // Для обычного браузера (не Telegram) - генерируем УНИКАЛЬНЫЙ ID
   if (typeof window !== 'undefined' && window.localStorage) {
-    return generateDevUserId();
+    const devId = generateDevUserId();
+    return devId;
   }
   
-  return `temp_${Date.now()}`;
+  // Fallback - генерируем временный ID
+  console.warn('⚠️  Используется fallback ID');
+  return `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
 // Получить данные пользователя
@@ -59,38 +83,48 @@ export function getUserData() {
     return tg.initDataUnsafe.user;
   }
   
+  // Для разработки
+  const devId = getUserId();
   return {
-    id: getUserId(),
+    id: devId,
     first_name: 'Test',
     last_name: 'User',
-    username: 'testuser'
+    username: 'testuser',
+    language_code: 'ru'
   };
 }
 
 // Проверка запуска в Telegram
 export function isRunningInTelegram() {
-  return !!(tg && tg.initData);
+  const inTelegram = !!(tg && tg.initData);
+  console.log('📱 Running in Telegram:', inTelegram);
+  return inTelegram;
 }
 
 // Показать кнопку назад
 export function showBackButton(onClick) {
-  if (!tg?.BackButton) return;
+  if (!tg || !tg.BackButton) {
+    console.log('⚠️  BackButton недоступна');
+    return;
+  }
   
   tg.BackButton.show();
   tg.BackButton.onClick(onClick);
+  console.log('◀️  Back button показана');
 }
 
 // Скрыть кнопку назад
 export function hideBackButton() {
-  if (!tg?.BackButton) return;
+  if (!tg || !tg.BackButton) return;
   
   tg.BackButton.hide();
   tg.BackButton.offClick();
+  console.log('◀️  Back button скрыта');
 }
 
 // Вибрация
 export function vibrate(style = 'light') {
-  if (!tg?.HapticFeedback) return;
+  if (!tg || !tg.HapticFeedback) return;
   
   const styles = {
     light: 'impact',
@@ -101,13 +135,50 @@ export function vibrate(style = 'light') {
   tg.HapticFeedback.impactOccurred(styles[style] || 'light');
 }
 
-// Открыть ссылку
+// Открыть Telegram ссылку
 export function openTelegramLink(url) {
-  if (tg?.openTelegramLink) {
-    tg.openTelegramLink(url);
-  } else {
+  if (!tg || !tg.openTelegramLink) {
     window.open(url, '_blank');
+    return;
   }
+
+  tg.openTelegramLink(url);
+  console.log('🔗 Открываем Telegram ссылку:', url);
+}
+
+// Показать главную кнопку
+export function showMainButton(text, onClick) {
+  if (!tg || !tg.MainButton) return;
+
+  tg.MainButton.text = text;
+  tg.MainButton.color = '#6366F1';
+  tg.MainButton.textColor = '#FFFFFF';
+  tg.MainButton.show();
+  tg.MainButton.onClick(onClick);
+}
+
+// Скрыть главную кнопку
+export function hideMainButton() {
+  if (!tg || !tg.MainButton) return;
+  
+  tg.MainButton.hide();
+  tg.MainButton.offClick();
+}
+
+// Закрыть приложение
+export function closeApp() {
+  if (!tg || !tg.close) {
+    window.close();
+    return;
+  }
+
+  tg.close();
+}
+
+// Получить высоту viewport
+export function getViewportHeight() {
+  if (!tg) return window.innerHeight;
+  return tg.viewportHeight || window.innerHeight;
 }
 
 export default tg;

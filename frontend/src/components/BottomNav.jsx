@@ -16,6 +16,7 @@ const BottomNav = () => {
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-dark-card/95 backdrop-blur-lg border-t border-gray-800 z-50">
       <div className="flex items-center justify-around h-16 px-4">
+        {/* Главная */}
         <button
           onClick={() => handleNavigate('/')}
           className={`flex flex-col items-center gap-1 transition-colors duration-200 ${
@@ -28,6 +29,7 @@ const BottomNav = () => {
           <span className="text-xs font-medium">Главная</span>
         </button>
 
+        {/* Избранное */}
         <button
           onClick={() => handleNavigate('/favorites')}
           className={`flex flex-col items-center gap-1 transition-colors duration-200 ${
@@ -39,6 +41,8 @@ const BottomNav = () => {
           </svg>
           <span className="text-xs font-medium">Избранное</span>
         </button>
+
+        {/* ✅ УБРАНО: Кнопка истории */}
       </div>
     </nav>
   );
