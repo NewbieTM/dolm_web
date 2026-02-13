@@ -1,86 +1,66 @@
 const TelegramBot = require('node-telegram-bot-api');
-require('dotenv').config();
-
-// Выбираем БД в зависимости от USE_MONGODB
-const USE_MONGODB = process.env.USE_MONGODB === 'true' && process.env.MONGODB_URI;
-const db = USE_MONGODB ? require('./mongodb') : require('./database');
-
-console.log('🤖 Telegram бот используе БД:', USE_MONGODB ? 'MongoDB' : 'JSON');
-
+const db = require('./database');
 const { uploadTelegramPhoto } = require('./cloudinary');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID = parseInt(process.env.ADMIN_ID);
-const FRONTEND_URL = process.env.FRONTEND_URL;
 
-// Создаём бота только если не запущен другой инстанс
+if (!BOT_TOKEN || !ADMIN_ID) {
+  throw new Error('❌ Не указаны BOT_TOKEN или ADMIN_ID в .env');
+}
+
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+
+console.log('✅ Telegram бот запущен');
+console.log('👤 Admin ID:', ADMIN_ID);
 
 // Хранилище для временных данных при добавлении товара
 const tempProductData = {};
 
-console.log('🤖 Telegram бот запущен...');
-console.log('👤 Admin ID:', ADMIN_ID);
-
-// Обработка ошибок polling
-bot.on('polling_error', (error) => {
-  if (error.code === 'ETELEGRAM' && error.message.includes('409')) {
-    console.error('⚠️  БОТ УЖЕ ЗАПУЩЕН! Остановите другой инстанс.');
-    console.error('⚠️  Проверьте что бот не запущен локально или на другом сервере');
-  } else {
-    console.error('Polling error:', error);
-  }
-});
+// Хранилище для редактирования товаров
+const tempEditData = {};
 
 // ========== КОМАНДЫ ==========
 
 // Команда /start
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
-  const userId = msg.from.id;
+  const userName = msg.from.first_name || 'друг';
   
-  try {
-    // Сохраняем пользователя
-    await db.upsertUser(userId.toString(), {
-      username: msg.from.username,
-      firstName: msg.from.first_name,
-      lastName: msg.from.last_name,
-      lastActive: new Date().toISOString()
-    });
-    
-    await db.updateStats('userVisit', userId.toString());
-    
-    const welcomeMessage = `
-👋 Привет, ${msg.from.first_name}!
+  await bot.sendMessage(chatId, `
+👋 Привет, ${userName}!
 
-Добро пожаловать в наш магазин стильной одежды! 
+Добро пожаловать в наш магазин одежды!
 
-🛍️ Нажмите на кнопку ниже, чтобы открыть каталог товаров.
-    `;
-
-    const isSecureFrontend = FRONTEND_URL && FRONTEND_URL.startsWith('https://');
-
-    // Для продакшена (https) используем Mini App кнопку
-    if (isSecureFrontend) {
-      await bot.sendMessage(chatId, welcomeMessage, {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: '🛍️ Открыть магазин', web_app: { url: FRONTEND_URL } }]
-          ]
-        }
-      });
-    } else {
-      // Для локальной разработки
-      await bot.sendMessage(chatId, welcomeMessage + `\n\nСсылка: ${FRONTEND_URL || 'не настроена'}`);
-    }
-  } catch (error) {
-    console.error('Ошибка в /start:', error);
-    await bot.sendMessage(chatId, '❌ Произошла ошибка. Попробуйте позже.');
-  }
+Нажми на кнопку меню внизу 🛍️ чтобы открыть каталог товаров.
+  `);
 });
 
+// Команда /admin
+bot.onText(/\/admin/, async (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  
+  if (userId !== ADMIN_ID) {
+    await bot.sendMessage(chatId, '❌ У вас нет доступа к админ-панели');
+    return;
+  }
+  
+  const adminMenu = `
+🔧 Админ-панель
 
-// Команда /add_product - добавление товара
+Доступные команды:
+/add_product - Добавить товар
+/edit_product [ID] - Редактировать товар
+/list_products - Список товаров
+/delete_product [ID] - Удалить товар
+/stats - Статистика
+  `;
+  
+  await bot.sendMessage(chatId, adminMenu);
+});
+
+// Команда /add_product
 bot.onText(/\/add_product/, async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
@@ -90,188 +70,65 @@ bot.onText(/\/add_product/, async (msg) => {
     return;
   }
   
-  // Инициализируем временные данные
-  tempProductData[chatId] = {
-    step: 'name'
-  };
-  
+  tempProductData[chatId] = { step: 'name' };
   await bot.sendMessage(chatId, '📝 Введите название товара:');
 });
 
-// Обработка текстовых сообщений для создания товара
-bot.on('message', async (msg) => {
+// Команда /edit_product
+bot.onText(/\/edit_product (.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
+  const productId = match[1];
   
-  // Проверяем что это админ и идёт процесс добавления товара
-  if (userId !== ADMIN_ID || !tempProductData[chatId]) {
-    return;
-  }
-  
-  const data = tempProductData[chatId];
-  const text = msg.text;
-  
-  // Игнорируем команды
-  if (text && text.startsWith('/')) {
+  if (userId !== ADMIN_ID) {
+    await bot.sendMessage(chatId, '❌ У вас нет доступа');
     return;
   }
   
   try {
-    switch (data.step) {
-      case 'name':
-        if (!text) return;
-        data.name = text;
-        data.step = 'price';
-        await bot.sendMessage(chatId, '💰 Введите цену товара (только число):');
-        break;
-        
-      case 'price':
-        if (!text) return;
-        const price = parseFloat(text);
-        if (isNaN(price) || price <= 0) {
-          await bot.sendMessage(chatId, '❌ Неправильная цена. Введите число (например: 2990):');
-          return;
-        }
-        data.price = price;
-        data.step = 'description';
-        await bot.sendMessage(chatId, '📄 Введите описание товара:');
-        break;
-        
-      case 'description':
-        if (!text) return;
-        data.description = text;
-        data.step = 'category';
-        
-        // Отправляем кнопки с категориями
-        await bot.sendMessage(chatId, '🏷️ Выберите категорию:', {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: '👟 Обувь', callback_data: 'cat_Обувь' }],
-              [{ text: '👕 Худи', callback_data: 'cat_Худи' }],
-              [{ text: '👔 Футболки', callback_data: 'cat_Футболки' }],
-              [{ text: '🎒 Аксессуары', callback_data: 'cat_Аксессуары' }]
-            ]
-          }
-        });
-        break;
-        
-      case 'photo':
-        // Фото обрабатываются отдельным обработчиком
-        break;
-    }
-  } catch (error) {
-    console.error('Ошибка обработки сообщения:', error);
-    await bot.sendMessage(chatId, '❌ Произошла ошибка. Попробуйте снова.');
-    delete tempProductData[chatId];
-  }
-});
-
-// Обработка выбора категории
-bot.on('callback_query', async (query) => {
-  const chatId = query.message.chat.id;
-  const userId = query.from.id;
-  const data = tempProductData[chatId];
-  
-  if (userId !== ADMIN_ID || !data) {
-    await bot.answerCallbackQuery(query.id, { text: '❌ Ошибка' });
-    return;
-  }
-  
-  if (query.data.startsWith('cat_')) {
-    const category = query.data.replace('cat_', '');
-    data.category = category;
-    data.step = 'photo';
-    data.photos = [];
+    const product = await db.getProductById(productId);
     
-    await bot.answerCallbackQuery(query.id, { text: `Выбрана категория: ${category}` });
-    await bot.sendMessage(chatId, `
-📸 Отправьте фото товара (можно несколько).
-
-Когда закончите, отправьте команду /done
-    `);
-  }
-});
-
-// Обработка фото
-bot.on('photo', async (msg) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  const data = tempProductData[chatId];
-  
-  if (userId !== ADMIN_ID || !data || data.step !== 'photo') {
-    return;
-  }
-  
-  try {
-    const photo = msg.photo[msg.photo.length - 1]; // Берём самое большое фото
-    const fileId = photo.file_id;
-    
-    await bot.sendMessage(chatId, '⏳ Загружаем фото...');
-    
-    // Загружаем в Cloudinary
-    const photoUrl = await uploadTelegramPhoto(bot, fileId);
-    
-    if (photoUrl) {
-      data.photos.push(photoUrl);
-      await bot.sendMessage(chatId, `✅ Фото добавлено (${data.photos.length})\n\nМожете добавить ещё или отправить /done`);
-    } else {
-      await bot.sendMessage(chatId, '❌ Ошибка загрузки фото');
-    }
-  } catch (error) {
-    console.error('Ошибка загрузки фото:', error);
-    await bot.sendMessage(chatId, '❌ Ошибка загрузки фото');
-  }
-});
-
-// Команда /done - завершение создания товара
-bot.onText(/\/done/, async (msg) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  const data = tempProductData[chatId];
-  
-  if (userId !== ADMIN_ID || !data) {
-    return;
-  }
-  
-  try {
-    // Проверяем что все поля заполнены
-    if (!data.name || !data.price || !data.description || !data.category || !data.photos || data.photos.length === 0) {
-      await bot.sendMessage(chatId, '❌ Не все поля заполнены. Начните сначала с /add_product');
-      delete tempProductData[chatId];
+    if (!product) {
+      await bot.sendMessage(chatId, `❌ Товар с ID ${productId} не найден`);
       return;
     }
     
-    // Создаём товар в БД
-    const product = await db.addProduct({
-      name: data.name,
-      price: data.price,
-      description: data.description,
-      category: data.category,
-      photos: data.photos
-    });
+    // Сохраняем товар для редактирования
+    tempEditData[chatId] = {
+      productId: productId,
+      originalProduct: { ...product }
+    };
     
-    if (product) {
-      await bot.sendMessage(chatId, `
-✅ Товар успешно добавлен!
+    // Показываем меню редактирования
+    await bot.sendMessage(chatId, `
+📝 Редактирование товара
 
-ID: ${product.id}
-Название: ${product.name}
-Цена: ${product.price} ₽
-Категория: ${product.category}
-Фото: ${product.photos.length} шт.
-      `);
-      
-      console.log('✅ Товар добавлен:', product.id, product.name);
-    } else {
-      await bot.sendMessage(chatId, '❌ Ошибка добавления товара в БД');
-    }
-    
-    // Очищаем временные данные
-    delete tempProductData[chatId];
+Текущие данные:
+━━━━━━━━━━━━━━
+📌 Название: ${product.name}
+💰 Цена: ${product.price} ₽
+📝 Описание: ${product.description}
+🏷️ Категория: ${product.category}
+📸 Фото: ${product.photos.length} шт.
+━━━━━━━━━━━━━━
+
+Что хотите изменить?
+    `, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '📌 Название', callback_data: 'edit_name' }],
+          [{ text: '💰 Цена', callback_data: 'edit_price' }],
+          [{ text: '📝 Описание', callback_data: 'edit_description' }],
+          [{ text: '🏷️ Категория', callback_data: 'edit_category' }],
+          [{ text: '📸 Фото', callback_data: 'edit_photos' }],
+          [{ text: '✅ Завершить', callback_data: 'edit_done' }],
+          [{ text: '❌ Отмена', callback_data: 'edit_cancel' }]
+        ]
+      }
+    });
   } catch (error) {
-    console.error('Ошибка создания товара:', error);
-    await bot.sendMessage(chatId, '❌ Произошла ошибка при создании товара');
-    delete tempProductData[chatId];
+    console.error('Ошибка при получении товара:', error);
+    await bot.sendMessage(chatId, '❌ Ошибка при загрузке товара');
   }
 });
 
@@ -350,6 +207,7 @@ bot.onText(/\/stats/, async (msg) => {
     const stats = await db.getStats();
     const products = await db.getAllProducts();
     const users = await db.getAllUsers();
+    const USE_MONGODB = process.env.USE_MONGODB === 'true';
     
     const message = `
 📊 Статистика магазина
@@ -368,75 +226,83 @@ bot.onText(/\/stats/, async (msg) => {
   }
 });
 
-// Добавить эти команды и обработчики в bot.js
-
-// ========== ДОПОЛНЕНИЕ К СУЩЕСТВУЮЩЕМУ КОДУ ==========
-
-// Хранилище для данных редактирования товаров
-const tempEditData = {};
-
-// Команда /edit_product - редактирование товара
-bot.onText(/\/edit_product (.+)/, async (msg, match) => {
+// Команда /done
+bot.onText(/\/done/, async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
-  const productId = match[1];
+  const data = tempProductData[chatId];
   
-  if (userId !== ADMIN_ID) {
-    await bot.sendMessage(chatId, '❌ У вас нет доступа');
+  if (userId !== ADMIN_ID || !data) {
     return;
   }
   
   try {
-    const product = await db.getProductById(productId);
-    
-    if (!product) {
-      await bot.sendMessage(chatId, `❌ Товар с ID ${productId} не найден`);
+    if (!data.name || !data.price || !data.description || !data.category || !data.photos || data.photos.length === 0) {
+      await bot.sendMessage(chatId, '❌ Не все поля заполнены. Начните сначала с /add_product');
+      delete tempProductData[chatId];
       return;
     }
     
-    // Сохраняем товар для редактирования
-    tempEditData[chatId] = {
-      productId: productId,
-      originalProduct: product
-    };
-    
-    // Показываем меню редактирования
-    await bot.sendMessage(chatId, `
-📝 Редактирование товара
-
-Текущие данные:
-━━━━━━━━━━━━━━
-📌 Название: ${product.name}
-💰 Цена: ${product.price} ₽
-📝 Описание: ${product.description}
-🏷️ Категория: ${product.category}
-📸 Фото: ${product.photos.length} шт.
-━━━━━━━━━━━━━━
-
-Что хотите изменить?
-    `, {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: '📌 Название', callback_data: 'edit_name' }],
-          [{ text: '💰 Цена', callback_data: 'edit_price' }],
-          [{ text: '📝 Описание', callback_data: 'edit_description' }],
-          [{ text: '🏷️ Категория', callback_data: 'edit_category' }],
-          [{ text: '📸 Фото', callback_data: 'edit_photos' }],
-          [{ text: '✅ Завершить', callback_data: 'edit_done' }],
-          [{ text: '❌ Отмена', callback_data: 'edit_cancel' }]
-        ]
-      }
+    const product = await db.addProduct({
+      name: data.name,
+      price: data.price,
+      description: data.description,
+      category: data.category,
+      photos: data.photos
     });
+    
+    if (product) {
+      await bot.sendMessage(chatId, `
+✅ Товар успешно добавлен!
+
+ID: ${product.id}
+Название: ${product.name}
+Цена: ${product.price} ₽
+Категория: ${product.category}
+Фото: ${product.photos.length} шт.
+      `);
+      
+      console.log('✅ Товар добавлен:', product.id, product.name);
+    } else {
+      await bot.sendMessage(chatId, '❌ Ошибка добавления товара в БД');
+    }
+    
+    delete tempProductData[chatId];
   } catch (error) {
-    console.error('Ошибка при получении товара:', error);
-    await bot.sendMessage(chatId, '❌ Ошибка при загрузке товара');
+    console.error('Ошибка создания товара:', error);
+    await bot.sendMessage(chatId, '❌ Произошла ошибка при создании товара');
+    delete tempProductData[chatId];
   }
 });
 
-// Обработка callback для редактирования
+// Команда /done_photos
+bot.onText(/\/done_photos/, async (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  const editData = tempEditData[chatId];
+  
+  if (userId !== ADMIN_ID || !editData || editData.editing !== 'photos') {
+    return;
+  }
+  
+  if (editData.newPhotos.length === 0) {
+    await bot.sendMessage(chatId, '❌ Добавьте хотя бы одно фото');
+    return;
+  }
+  
+  editData.originalProduct.photos = editData.newPhotos;
+  delete editData.editing;
+  delete editData.newPhotos;
+  
+  await bot.sendMessage(chatId, `✅ Фото обновлены (${editData.originalProduct.photos.length} шт.)\n\nОтправьте /edit_product ${editData.productId} для продолжения`);
+});
+
+// ========== ОБРАБОТЧИКИ CALLBACK ==========
+
 bot.on('callback_query', async (query) => {
   const chatId = query.message.chat.id;
   const userId = query.from.id;
+  const data = tempProductData[chatId];
   const editData = tempEditData[chatId];
   
   if (userId !== ADMIN_ID) {
@@ -444,12 +310,12 @@ bot.on('callback_query', async (query) => {
     return;
   }
   
-  // Обработка выбора категории при добавлении
-  if (query.data.startsWith('cat_') && tempProductData[chatId]) {
+  // ===== ДОБАВЛЕНИЕ ТОВАРА =====
+  if (query.data.startsWith('cat_') && data) {
     const category = query.data.replace('cat_', '');
-    tempProductData[chatId].category = category;
-    tempProductData[chatId].step = 'photo';
-    tempProductData[chatId].photos = [];
+    data.category = category;
+    data.step = 'photo';
+    data.photos = [];
     
     await bot.answerCallbackQuery(query.id, { text: `Выбрана категория: ${category}` });
     await bot.sendMessage(chatId, `
@@ -460,9 +326,9 @@ bot.on('callback_query', async (query) => {
     return;
   }
   
-  // Обработка редактирования
+  // ===== РЕДАКТИРОВАНИЕ ТОВАРА =====
   if (!editData) {
-    await bot.answerCallbackQuery(query.id, { text: '❌ Сессия редактирования не найдена' });
+    // Если это не редактирование, просто выходим
     return;
   }
   
@@ -554,17 +420,58 @@ ID: ${editData.productId}
   }
 });
 
-// Обработка текстовых сообщений при редактировании
+// ========== ОБРАБОТЧИКИ СООБЩЕНИЙ ==========
+
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
   const text = msg.text;
   
   if (userId !== ADMIN_ID) return;
+  if (!text || text.startsWith('/')) return;
   
-  // Обработка редактирования
+  // ===== ДОБАВЛЕНИЕ ТОВАРА =====
+  const data = tempProductData[chatId];
+  if (data) {
+    switch (data.step) {
+      case 'name':
+        data.name = text;
+        data.step = 'price';
+        await bot.sendMessage(chatId, '💰 Введите цену товара (только число):');
+        break;
+        
+      case 'price':
+        const price = parseFloat(text);
+        if (isNaN(price) || price <= 0) {
+          await bot.sendMessage(chatId, '❌ Неправильная цена. Введите число (например: 2990):');
+          return;
+        }
+        data.price = price;
+        data.step = 'description';
+        await bot.sendMessage(chatId, '📄 Введите описание товара:');
+        break;
+        
+      case 'description':
+        data.description = text;
+        data.step = 'category';
+        await bot.sendMessage(chatId, '🏷️ Выберите категорию:', {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '👟 Обувь', callback_data: 'cat_Обувь' }],
+              [{ text: '👕 Худи', callback_data: 'cat_Худи' }],
+              [{ text: '👔 Футболки', callback_data: 'cat_Футболки' }],
+              [{ text: '🎒 Аксессуары', callback_data: 'cat_Аксессуары' }]
+            ]
+          }
+        });
+        break;
+    }
+    return;
+  }
+  
+  // ===== РЕДАКТИРОВАНИЕ ТОВАРА =====
   const editData = tempEditData[chatId];
-  if (editData && editData.editing && text && !text.startsWith('/')) {
+  if (editData && editData.editing) {
     const product = editData.originalProduct;
     
     switch (editData.editing) {
@@ -591,94 +498,49 @@ bot.on('message', async (msg) => {
         delete editData.editing;
         break;
     }
-    return;
   }
-  
-  // Остальная логика обработки сообщений (добавление товара)...
 });
 
-// Обработка фото при редактировании
+// Обработка фото
 bot.on('photo', async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
   
   if (userId !== ADMIN_ID) return;
   
+  const data = tempProductData[chatId];
   const editData = tempEditData[chatId];
   
-  // Если редактируем фото
-  if (editData && editData.editing === 'photos') {
-    try {
-      const photo = msg.photo[msg.photo.length - 1];
-      const fileId = photo.file_id;
-      
-      await bot.sendMessage(chatId, '⏳ Загружаем фото...');
-      
-      const photoUrl = await uploadTelegramPhoto(bot, fileId);
-      
-      if (photoUrl) {
-        editData.newPhotos.push(photoUrl);
-        await bot.sendMessage(chatId, `✅ Фото добавлено (${editData.newPhotos.length})\n\nОтправьте /done_photos когда закончите`);
-      } else {
-        await bot.sendMessage(chatId, '❌ Ошибка загрузки фото');
-      }
-    } catch (error) {
-      console.error('Ошибка загрузки фото:', error);
+  try {
+    const photo = msg.photo[msg.photo.length - 1];
+    const fileId = photo.file_id;
+    
+    await bot.sendMessage(chatId, '⏳ Загружаем фото...');
+    
+    const photoUrl = await uploadTelegramPhoto(bot, fileId);
+    
+    if (!photoUrl) {
       await bot.sendMessage(chatId, '❌ Ошибка загрузки фото');
+      return;
     }
-    return;
+    
+    // Добавление товара
+    if (data && data.step === 'photo') {
+      data.photos.push(photoUrl);
+      await bot.sendMessage(chatId, `✅ Фото добавлено (${data.photos.length})\n\nМожете добавить ещё или отправить /done`);
+      return;
+    }
+    
+    // Редактирование товара
+    if (editData && editData.editing === 'photos') {
+      editData.newPhotos.push(photoUrl);
+      await bot.sendMessage(chatId, `✅ Фото добавлено (${editData.newPhotos.length})\n\nОтправьте /done_photos когда закончите`);
+      return;
+    }
+  } catch (error) {
+    console.error('Ошибка загрузки фото:', error);
+    await bot.sendMessage(chatId, '❌ Ошибка загрузки фото');
   }
-  
-  // Остальная логика для добавления товара...
 });
-
-// Команда /done_photos - завершение редактирования фото
-bot.onText(/\/done_photos/, async (msg) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  const editData = tempEditData[chatId];
-  
-  if (userId !== ADMIN_ID || !editData || editData.editing !== 'photos') {
-    return;
-  }
-  
-  if (editData.newPhotos.length === 0) {
-    await bot.sendMessage(chatId, '❌ Добавьте хотя бы одно фото');
-    return;
-  }
-  
-  editData.originalProduct.photos = editData.newPhotos;
-  delete editData.editing;
-  delete editData.newPhotos;
-  
-  await bot.sendMessage(chatId, `✅ Фото обновлены (${editData.originalProduct.photos.length} шт.)\n\nОтправьте /edit_product ${editData.productId} для продолжения`);
-});
-
-// ОБНОВИТЬ МЕНЮ АДМИНА
-// Заменить команду /admin на эту версию:
-bot.onText(/\/admin/, async (msg) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  
-  if (userId !== ADMIN_ID) {
-    await bot.sendMessage(chatId, '❌ У вас нет доступа к админ-панели');
-    return;
-  }
-  
-  const adminMenu = `
-🔧 Админ-панель
-
-Доступные команды:
-/add_product - Добавить товар
-/edit_product [ID] - Редактировать товар
-/list_products - Список товаров
-/delete_product [ID] - Удалить товар
-/stats - Статистика
-  `;
-  
-  await bot.sendMessage(chatId, adminMenu);
-});
-
-
 
 module.exports = bot;
