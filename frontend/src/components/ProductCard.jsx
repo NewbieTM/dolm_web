@@ -13,17 +13,16 @@ const ProductCard = ({ product, isFavorite, onToggleFavorite }) => {
 
   const handleFavoriteClick = (e) => {
     e.stopPropagation();
-    vibrate('medium');
+    vibrate('light');
     onToggleFavorite(product.id);
   };
 
   return (
     <div
       onClick={handleClick}
-      className="bg-dark-card rounded-2xl overflow-hidden cursor-pointer transform transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] fade-in"
+      className="bg-dark-card rounded-2xl overflow-hidden transition-transform duration-200 active:scale-95 cursor-pointer"
     >
-      {/* Изображение */}
-      <div className="relative aspect-square bg-dark-hover">
+      <div className="relative aspect-square overflow-hidden bg-dark-hover">
         {!imageLoaded && (
           <div className="absolute inset-0 skeleton" />
         )}
@@ -37,7 +36,6 @@ const ProductCard = ({ product, isFavorite, onToggleFavorite }) => {
           loading="lazy"
         />
         
-        {/* Кнопка избранного */}
         <button
           onClick={handleFavoriteClick}
           className="absolute top-3 right-3 w-10 h-10 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center transition-colors duration-200 hover:bg-black/70"
@@ -55,7 +53,6 @@ const ProductCard = ({ product, isFavorite, onToggleFavorite }) => {
           </svg>
         </button>
 
-        {/* Бейдж категории */}
         <div className="absolute bottom-3 left-3">
           <span className="px-3 py-1 bg-black/50 backdrop-blur-sm rounded-full text-xs font-medium text-white">
             {product.category}
@@ -63,7 +60,6 @@ const ProductCard = ({ product, isFavorite, onToggleFavorite }) => {
         </div>
       </div>
 
-      {/* Информация */}
       <div className="p-4">
         <h3 className="text-white font-semibold text-base line-clamp-2 mb-2">
           {product.name}

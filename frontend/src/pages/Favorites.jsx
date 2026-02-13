@@ -11,16 +11,13 @@ const Favorites = () => {
   const userId = getUserId();
 
   useEffect(() => {
-    console.log('Favorites page mounted, userId:', userId);
     loadFavorites();
   }, []);
 
   const loadFavorites = async () => {
     setLoading(true);
     try {
-      console.log('Loading favorites...');
       const response = await getFavorites(userId);
-      console.log('Favorites response:', response);
       
       if (response.success) {
         setProducts(response.data);
@@ -33,11 +30,8 @@ const Favorites = () => {
   };
 
   const handleToggleFavorite = async (productId) => {
-    console.log('Removing from favorites:', productId);
-    
     try {
       const response = await removeFromFavorites(userId, productId);
-      console.log('Remove response:', response);
       
       if (response.success) {
         setProducts(products.filter(p => p.id !== productId));
@@ -49,17 +43,13 @@ const Favorites = () => {
 
   return (
     <div className="min-h-screen bg-dark-bg pb-20">
-      {/* Заголовок */}
       <header className="sticky top-0 z-20 bg-dark-bg/95 backdrop-blur-lg border-b border-gray-800">
-        {/* Ограничиваем ширину на больших экранах */}
         <div className="max-w-7xl mx-auto px-4 py-4">
           <h1 className="text-2xl font-bold text-white">Избранное</h1>
         </div>
       </header>
 
-      {/* Контент с ограничением ширины */}
       <div className="max-w-7xl mx-auto">
-        {/* Товары - адаптивная сетка */}
         <div className="px-4 pt-4">
           {loading ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
@@ -88,7 +78,6 @@ const Favorites = () => {
               </p>
             </div>
           ) : (
-            /* Адаптивная сетка как в каталоге */
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               {products.map((product) => (
                 <ProductCard
@@ -103,10 +92,7 @@ const Favorites = () => {
         </div>
       </div>
 
-      {/* Кнопка связи с менеджером */}
       <ContactButton />
-
-      {/* Нижнее меню */}
       <BottomNav />
     </div>
   );

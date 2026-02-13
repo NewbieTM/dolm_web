@@ -11,7 +11,7 @@
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   background-color: #0F0F0F;
-  color: #FFFFFF;
+  color: #fff;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -19,94 +19,49 @@ body {
 
 #root {
   min-height: 100vh;
-}
-
-/* Скрываем scrollbar в Telegram */
-::-webkit-scrollbar {
-  width: 0px;
-  background: transparent;
-}
-
-/* Плавная прокрутка */
-html {
-  scroll-behavior: smooth;
-}
-
-/* Анимации */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.fade-in {
-  animation: fadeIn 0.3s ease-out;
-}
-
-/* Кастомные утилиты */
-.glass-effect {
-  background: rgba(26, 26, 26, 0.8);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-
-.text-gradient {
-  background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* Скелетон загрузки */
-@keyframes shimmer {
-  0% {
-    background-position: -1000px 0;
-  }
-  100% {
-    background-position: 1000px 0;
-  }
+  width: 100%;
 }
 
 .skeleton {
-  animation: shimmer 2s infinite linear;
   background: linear-gradient(
     90deg,
-    #1A1A1A 0px,
-    #252525 40px,
-    #1A1A1A 80px
+    #1A1A1A 0%,
+    #252525 50%,
+    #1A1A1A 100%
   );
-  background-size: 1000px 100%;
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
 }
 
-/* Адаптивные изображения */
-img {
-  max-width: 100%;
-  height: auto;
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
 }
 
-/* Кнопки */
-button {
-  cursor: pointer;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
+/* Скрываем скроллбар но оставляем функциональность */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #252525 #0F0F0F;
 }
 
-button:active {
-  transform: scale(0.98);
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-/* Инпуты */
-input {
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  appearance: none;
+*::-webkit-scrollbar-track {
+  background: #0F0F0F;
 }
 
-input:focus {
-  outline: none;
+*::-webkit-scrollbar-thumb {
+  background-color: #252525;
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: #333;
 }
