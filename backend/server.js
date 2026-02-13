@@ -12,77 +12,53 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Глобальная переменная для БД
-let db;
+// Глобальная переменная для БД (будет установлена при инициализации)
+let db = null;
 let USE_MONGODB = false;
-let botInstance = null;
 
-// Инициализация базы данных
+// Функция инициализации БД
 async function initializeDatabase() {
+  console.log('🔧 Инициализация базы данных...');
+  
   const wantsMongoDB = process.env.USE_MONGODB === 'true' && process.env.MONGODB_URI;
   
   if (wantsMongoDB) {
     try {
       console.log('🔄 Попытка подключения к MongoDB...');
-      db = require('./mongodb');
-      await db.initDatabase();
+      const mongoDb = require('./mongodb');
+      await mongoDb.initDatabase();
+      db = mongoDb;
       USE_MONGODB = true;
-      console.log('✅ Используется MongoDB');
+      console.log('✅ MongoDB подключена и инициализирована');
       return true;
     } catch (error) {
-      console.error('❌ MongoDB недоступна, переключаемся на JSON:', error.message);
-      db = require('./database');
-      await db.initDatabase();
-      console.log('⚠️  Используется JSON (fallback)');
-      return false;
+      console.error('❌ MongoDB недоступна:', error.message);
+      console.log('⚠️  Переключаемся на JSON файлы...');
     }
-  } else {
-    db = require('./database');
-    await db.initDatabase();
-    console.log('📁 Используется JSON файлы');
-    return false;
   }
+  
+  // Fallback на JSON
+  const jsonDb = require('./database');
+  await jsonDb.initDatabase();
+  db = jsonDb;
+  USE_MONGODB = false;
+  console.log('✅ JSON база данных инициализирована');
+  return false;
 }
 
-// Инициализация бота ТОЛЬКО ОДИН РАЗ
-async function initializeBot() {
-  // Если бот уже запущен, не запускаем снова
-  if (botInstance) {
-    console.log('⚠️  Бот уже запущен, пропускаем инициализацию');
-    return;
-  }
-
+// Функция запуска бота
+async function startBot() {
+  // Передаем БД в глобальную переменную для бота
+  global.dbInstance = db;
+  global.USE_MONGODB = USE_MONGODB;
+  
   try {
-    // Экспортируем db глобально для бота
-    global.dbInstance = db;
-    global.USE_MONGODB = USE_MONGODB;
-    
-    // Импортируем бота
-    botInstance = require('./bot');
+    require('./bot');
     console.log('✅ Telegram бот запущен');
   } catch (error) {
     console.error('❌ Ошибка запуска бота:', error.message);
-    // Не падаем, если бот не запустился
   }
 }
-
-// Запуск приложения
-initializeDatabase()
-  .then(async () => {
-    console.log('✅ База данных готова к работе');
-    
-    // Запускаем бота только в production
-    if (process.env.NODE_ENV === 'production') {
-      await initializeBot();
-    } else {
-      console.log('ℹ️  Бот НЕ запущен (dev mode)');
-      console.log('ℹ️  Для запуска бота используйте: node bot.js');
-    }
-  })
-  .catch(err => {
-    console.error('❌ Критическая ошибка инициализации:', err);
-    process.exit(1);
-  });
 
 // ========== ROUTES ==========
 
@@ -92,8 +68,7 @@ app.get('/', (req, res) => {
     status: 'ok', 
     message: 'Clothing Shop API',
     version: '1.0.0',
-    database: USE_MONGODB ? 'MongoDB' : 'JSON',
-    bot: botInstance ? 'active' : 'inactive'
+    database: USE_MONGODB ? 'MongoDB' : 'JSON'
   });
 });
 
@@ -320,9 +295,36 @@ app.get('/api/admin/stats', async (req, res) => {
   }
 });
 
-// Запуск сервера
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Сервер запущен на порту ${PORT}`);
-  console.log(`📦 База данных: ${USE_MONGODB ? 'MongoDB' : 'JSON'}`);
-  console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'не указан'}`);
-});
+// ========== ГЛАВНАЯ ФУНКЦИЯ ЗАПУСКА ==========
+
+async function startServer() {
+  try {
+    // 1. Инициализируем БД
+    await initializeDatabase();
+    
+    // 2. Запускаем HTTP сервер
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log('');
+      console.log('🚀 ================================');
+      console.log(`📡 Сервер запущен на порту ${PORT}`);
+      console.log(`📦 База данных: ${USE_MONGODB ? 'MongoDB ✅' : 'JSON 📁'}`);
+      console.log(`🌐 Frontend: ${process.env.FRONTEND_URL || 'не указан'}`);
+      console.log('🚀 ================================');
+      console.log('');
+    });
+    
+    // 3. Запускаем бота (только в production)
+    if (process.env.NODE_ENV === 'production') {
+      await startBot();
+    } else {
+      console.log('ℹ️  Бот НЕ запущен (dev mode)');
+    }
+    
+  } catch (error) {
+    console.error('❌ КРИТИЧЕСКАЯ ОШИБКА:', error);
+    process.exit(1);
+  }
+}
+
+// Запускаем сервер
+startServer();
