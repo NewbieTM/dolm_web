@@ -1,13 +1,19 @@
 {
-  "totalViews": 0,
+  "totalViews": 3,
   "totalUsers": 1,
-  "popularProducts": {},
+  "popularProducts": {
+    "1770821073966": 3
+  },
   "dailyStats": {
     "2026-02-11": {
       "views": 0,
       "users": [
         "855431959"
       ]
+    },
+    "2026-02-13": {
+      "views": 3,
+      "users": []
     }
   }
 }
