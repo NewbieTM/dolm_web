@@ -1,164 +1,184 @@
-// Инициализация Telegram WebApp
-let tg = null;
+// Telegram Web App SDK
+const tg = typeof window !== 'undefined' ? window.Telegram?.WebApp : undefined;
 
-export const initTelegramApp = () => {
-  // Проверяем наличие window и Telegram
-  if (typeof window !== 'undefined' && window.Telegram && window.Telegram.WebApp) {
-    tg = window.Telegram.WebApp;
-    
-    console.log('🔧 Настройка Telegram WebApp...');
-    
-    // Разворачиваем приложение на весь экран
-    tg.expand();
-    
-    // Включаем закрытие свайпом вниз
-    tg.enableClosingConfirmation();
-    
-    // Устанавливаем цвета темы
-    tg.setHeaderColor('#0f0f0f');
-    tg.setBackgroundColor('#0f0f0f');
-    
-    // Говорим Telegram что приложение готово
-    tg.ready();
-    
-    console.log('✅ Telegram WebApp инициализирован');
-    console.log('User ID:', tg.initDataUnsafe?.user?.id);
-    console.log('Platform:', tg.platform);
-    console.log('Version:', tg.version);
-    
-    return tg;
+// Генерируем уникальный ID для dev режима
+function generateDevUserId() {
+  let userId = localStorage.getItem('dev_user_id');
+  
+  if (!userId) {
+    // Создаём уникальный ID на основе времени и случайного числа
+    userId = `dev_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    localStorage.setItem('dev_user_id', userId);
+    console.log('🆔 Создан новый уникальный dev user ID:', userId);
   } else {
-    console.warn('⚠️ Telegram WebApp API недоступен (вероятно, открыто в браузере)');
-    
-    // Возвращаем mock-объект для тестирования в браузере
-    return {
-      initDataUnsafe: {
-        user: {
-          id: 123456789, // Тестовый ID для разработки
-          first_name: 'Test',
-          last_name: 'User',
-          username: 'testuser'
-        }
-      },
-      platform: 'web',
-      version: '6.0',
-      ready: () => console.log('Mock: ready()'),
-      expand: () => console.log('Mock: expand()'),
-      close: () => console.log('Mock: close()'),
-      enableClosingConfirmation: () => console.log('Mock: enableClosingConfirmation()'),
-      setHeaderColor: (color) => console.log('Mock: setHeaderColor(' + color + ')'),
-      setBackgroundColor: (color) => console.log('Mock: setBackgroundColor(' + color + ')'),
-      BackButton: {
-        show: () => console.log('Mock: BackButton.show()'),
-        hide: () => console.log('Mock: BackButton.hide()'),
-        onClick: (callback) => console.log('Mock: BackButton.onClick()'),
-        offClick: (callback) => console.log('Mock: BackButton.offClick()')
-      },
-      HapticFeedback: {
-        impactOccurred: (style) => console.log('Mock: HapticFeedback.impactOccurred(' + style + ')'),
-        notificationOccurred: (type) => console.log('Mock: HapticFeedback.notificationOccurred(' + type + ')'),
-        selectionChanged: () => console.log('Mock: HapticFeedback.selectionChanged()')
-      }
-    };
-  }
-};
-
-// Получить ID пользователя
-export const getUserId = () => {
-  if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
-    return tg.initDataUnsafe.user.id.toString();
+    console.log('🆔 Загружен существующий dev user ID:', userId);
   }
   
-  console.warn('⚠️ Использую тестовый User ID');
-  return '123456789'; // Дефолтный ID для тестов в браузере
-};
+  return userId;
+}
 
-// Получить данные пользователя
-export const getUserData = () => {
-  if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
-    return tg.initDataUnsafe.user;
-  }
-  
-  console.warn('⚠️ Использую тестовые данные пользователя');
-  return {
-    id: 123456789,
-    first_name: 'Test',
-    last_name: 'User',
-    username: 'testuser'
-  };
-};
-
-// Вибрация (тактильная обратная связь)
-export const vibrate = (style = 'light') => {
-  if (!tg || !tg.HapticFeedback) {
-    return;
+// Инициализация приложения
+export function initTelegramApp() {
+  if (!tg) {
+    console.warn('⚠️  Telegram WebApp SDK не найден');
+    console.log('Работаем в режиме разработки с уникальным пользователем');
+    return null;
   }
 
   try {
-    // Impact стили: light, medium, heavy, rigid, soft
-    if (['light', 'medium', 'heavy', 'rigid', 'soft'].includes(style)) {
-      tg.HapticFeedback.impactOccurred(style);
-    } 
-    // Notification типы: success, warning, error
-    else if (['success', 'warning', 'error'].includes(style)) {
-      tg.HapticFeedback.notificationOccurred(style);
-    } 
-    // Selection changed
-    else if (style === 'selection') {
-      tg.HapticFeedback.selectionChanged();
+    console.log('🔧 Инициализация Telegram WebApp...');
+    
+    // ВАЖНО: Готовим приложение
+    tg.ready();
+    
+    // Разворачиваем на весь экран
+    if (tg.expand) {
+      tg.expand();
     }
+
+    // Устанавливаем цвета
+    if (tg.setHeaderColor) {
+      tg.setHeaderColor('#0F0F0F');
+    }
+    if (tg.setBackgroundColor) {
+      tg.setBackgroundColor('#0F0F0F');
+    }
+
+    console.log('✅ Telegram WebApp готов');
+    console.log('📱 Platform:', tg.platform);
+    console.log('🆔 User ID:', getUserId());
+    console.log('👤 User:', getUserData());
+    console.log('🔗 Init Data:', tg.initData ? 'присутствует' : 'отсутствует');
+    
+    return tg;
   } catch (error) {
-    console.error('Ошибка вибрации:', error);
+    console.error('❌ Ошибка инициализации Telegram WebApp:', error);
+    return null;
   }
-};
+}
 
-// Показать кнопку "Назад"
-export const showBackButton = (callback) => {
-  if (tg && tg.BackButton) {
-    // Убираем предыдущие обработчики
-    tg.BackButton.offClick(callback);
-    // Добавляем новый обработчик
-    tg.BackButton.onClick(callback);
-    // Показываем кнопку
-    tg.BackButton.show();
+// Получить стабильный ID пользователя
+export function getUserId() {
+  // В Telegram Mini App - используем реальный ID
+  if (tg?.initDataUnsafe?.user?.id) {
+    const id = tg.initDataUnsafe.user.id.toString();
+    console.log('🆔 Telegram User ID:', id);
+    return id;
   }
-};
+  
+  // Для обычного браузера (не Telegram) - генерируем УНИКАЛЬНЫЙ ID
+  if (typeof window !== 'undefined' && window.localStorage) {
+    const devId = generateDevUserId();
+    return devId;
+  }
+  
+  // Fallback - генерируем временный ID
+  console.warn('⚠️  Используется fallback ID');
+  return `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
 
-// Скрыть кнопку "Назад"
-export const hideBackButton = () => {
-  if (tg && tg.BackButton) {
-    tg.BackButton.hide();
+// Получить данные пользователя
+export function getUserData() {
+  if (tg?.initDataUnsafe?.user) {
+    return tg.initDataUnsafe.user;
   }
-};
+  
+  // Для разработки
+  const devId = getUserId();
+  return {
+    id: devId,
+    first_name: 'Test',
+    last_name: 'User',
+    username: 'testuser',
+    language_code: 'ru'
+  };
+}
+
+// Проверка запуска в Telegram
+export function isRunningInTelegram() {
+  const inTelegram = !!(tg && tg.initData);
+  console.log('📱 Running in Telegram:', inTelegram);
+  return inTelegram;
+}
+
+// Показать кнопку назад
+export function showBackButton(onClick) {
+  if (!tg || !tg.BackButton) {
+    console.log('⚠️  BackButton недоступна');
+    return;
+  }
+  
+  tg.BackButton.show();
+  tg.BackButton.onClick(onClick);
+  console.log('◀️  Back button показана');
+}
+
+// Скрыть кнопку назад
+export function hideBackButton() {
+  if (!tg || !tg.BackButton) return;
+  
+  tg.BackButton.hide();
+  tg.BackButton.offClick();
+  console.log('◀️  Back button скрыта');
+}
+
+// Вибрация
+export function vibrate(style = 'light') {
+  if (!tg || !tg.HapticFeedback) return;
+  
+  const styles = {
+    light: 'impact',
+    medium: 'notification',
+    heavy: 'heavy'
+  };
+
+  tg.HapticFeedback.impactOccurred(styles[style] || 'light');
+}
+
+// Открыть Telegram ссылку
+export function openTelegramLink(url) {
+  if (!tg || !tg.openTelegramLink) {
+    window.open(url, '_blank');
+    return;
+  }
+
+  tg.openTelegramLink(url);
+  console.log('🔗 Открываем Telegram ссылку:', url);
+}
+
+// Показать главную кнопку
+export function showMainButton(text, onClick) {
+  if (!tg || !tg.MainButton) return;
+
+  tg.MainButton.text = text;
+  tg.MainButton.color = '#6366F1';
+  tg.MainButton.textColor = '#FFFFFF';
+  tg.MainButton.show();
+  tg.MainButton.onClick(onClick);
+}
+
+// Скрыть главную кнопку
+export function hideMainButton() {
+  if (!tg || !tg.MainButton) return;
+  
+  tg.MainButton.hide();
+  tg.MainButton.offClick();
+}
 
 // Закрыть приложение
-export const closeApp = () => {
-  if (tg && tg.close) {
-    tg.close();
+export function closeApp() {
+  if (!tg || !tg.close) {
+    window.close();
+    return;
   }
-};
 
-// Открыть ссылку в Telegram (для ссылок вида t.me/...)
-export const openTelegramLink = (url) => {
-  if (tg && tg.openTelegramLink) {
-    tg.openTelegramLink(url);
-  } else {
-    window.open(url, '_blank');
-  }
-};
+  tg.close();
+}
 
-// Открыть внешнюю ссылку
-export const openLink = (url) => {
-  if (tg && tg.openLink) {
-    tg.openLink(url);
-  } else {
-    window.open(url, '_blank');
-  }
-};
-
-// Проверка, запущено ли в Telegram
-export const isTelegramWebApp = () => {
-  return tg && tg.platform !== 'web';
-};
+// Получить высоту viewport
+export function getViewportHeight() {
+  if (!tg) return window.innerHeight;
+  return tg.viewportHeight || window.innerHeight;
+}
 
 export default tg;
