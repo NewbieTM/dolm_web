@@ -1,5 +1,4 @@
 const TelegramBot = require('node-telegram-bot-api');
-const db = require('./database');
 const { uploadTelegramPhoto } = require('./cloudinary');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -9,10 +8,20 @@ if (!BOT_TOKEN || !ADMIN_ID) {
   throw new Error('❌ Не указаны BOT_TOKEN или ADMIN_ID в .env');
 }
 
-const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+// Получаем правильную БД из глобальной переменной
+const db = global.dbInstance || require('./database');
+const USE_MONGODB = global.USE_MONGODB || false;
+
+// Настройка бота в зависимости от окружения
+const botOptions = { 
+  polling: process.env.NODE_ENV !== 'production'
+};
+
+const bot = new TelegramBot(BOT_TOKEN, botOptions);
 
 console.log('✅ Telegram бот запущен');
 console.log('👤 Admin ID:', ADMIN_ID);
+console.log('📦 База данных в боте:', USE_MONGODB ? 'MongoDB' : 'JSON');
 
 // Хранилище для временных данных при добавлении товара
 const tempProductData = {};
@@ -121,14 +130,16 @@ bot.onText(/\/edit_product (.+)/, async (msg, match) => {
           [{ text: '📝 Описание', callback_data: 'edit_description' }],
           [{ text: '🏷️ Категория', callback_data: 'edit_category' }],
           [{ text: '📸 Фото', callback_data: 'edit_photos' }],
-          [{ text: '✅ Завершить', callback_data: 'edit_done' }],
-          [{ text: '❌ Отмена', callback_data: 'edit_cancel' }]
+          [
+            { text: '✅ Сохранить', callback_data: 'edit_done' },
+            { text: '❌ Отмена', callback_data: 'edit_cancel' }
+          ]
         ]
       }
     });
   } catch (error) {
-    console.error('Ошибка при получении товара:', error);
-    await bot.sendMessage(chatId, '❌ Ошибка при загрузке товара');
+    console.error('Ошибка получения товара:', error);
+    await bot.sendMessage(chatId, '❌ Ошибка получения товара');
   }
 });
 
@@ -146,12 +157,11 @@ bot.onText(/\/list_products/, async (msg) => {
     const products = await db.getAllProducts();
     
     if (products.length === 0) {
-      await bot.sendMessage(chatId, '📦 Товаров пока нет');
+      await bot.sendMessage(chatId, '📦 Товаров пока нет. Добавьте первый командой /add_product');
       return;
     }
     
-    let message = `📦 Всего товаров: ${products.length}\n\n`;
-    
+    let message = `📦 Товары (${products.length}):\n\n`;
     products.forEach((p, i) => {
       message += `${i + 1}. ${p.name}\n`;
       message += `   ID: ${p.id}\n`;
@@ -207,7 +217,6 @@ bot.onText(/\/stats/, async (msg) => {
     const stats = await db.getStats();
     const products = await db.getAllProducts();
     const users = await db.getAllUsers();
-    const USE_MONGODB = process.env.USE_MONGODB === 'true';
     
     const message = `
 📊 Статистика магазина
@@ -226,7 +235,7 @@ bot.onText(/\/stats/, async (msg) => {
   }
 });
 
-// Команда /done
+// Команда /done - завершение добавления товара
 bot.onText(/\/done/, async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
@@ -242,6 +251,12 @@ bot.onText(/\/done/, async (msg) => {
       delete tempProductData[chatId];
       return;
     }
+    
+    console.log('💾 Сохраняем товар в БД:', { 
+      name: data.name, 
+      category: data.category,
+      db: USE_MONGODB ? 'MongoDB' : 'JSON'
+    });
     
     const product = await db.addProduct({
       name: data.name,
@@ -260,22 +275,25 @@ ID: ${product.id}
 Цена: ${product.price} ₽
 Категория: ${product.category}
 Фото: ${product.photos.length} шт.
+
+БД: ${USE_MONGODB ? 'MongoDB ✅' : 'JSON'}
       `);
       
-      console.log('✅ Товар добавлен:', product.id, product.name);
+      console.log('✅ Товар добавлен в БД:', product.id, product.name);
     } else {
       await bot.sendMessage(chatId, '❌ Ошибка добавления товара в БД');
+      console.error('❌ db.addProduct вернул null/undefined');
     }
     
     delete tempProductData[chatId];
   } catch (error) {
-    console.error('Ошибка создания товара:', error);
-    await bot.sendMessage(chatId, '❌ Произошла ошибка при создании товара');
+    console.error('❌ Ошибка создания товара:', error);
+    await bot.sendMessage(chatId, `❌ Произошла ошибка при создании товара: ${error.message}`);
     delete tempProductData[chatId];
   }
 });
 
-// Команда /done_photos
+// Команда /done_photos - завершение добавления фото при редактировании
 bot.onText(/\/done_photos/, async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
@@ -328,7 +346,6 @@ bot.on('callback_query', async (query) => {
   
   // ===== РЕДАКТИРОВАНИЕ ТОВАРА =====
   if (!editData) {
-    // Если это не редактирование, просто выходим
     return;
   }
   
@@ -381,6 +398,8 @@ bot.on('callback_query', async (query) => {
       await bot.answerCallbackQuery(query.id, { text: 'Сохраняем изменения...' });
       try {
         const product = editData.originalProduct;
+        console.log('💾 Обновляем товар в БД:', editData.productId);
+        
         const success = await db.updateProduct(editData.productId, product);
         
         if (success) {
@@ -392,12 +411,14 @@ ID: ${editData.productId}
 Цена: ${product.price} ₽
 Категория: ${product.category}
           `);
+          console.log('✅ Товар обновлен в БД:', editData.productId);
         } else {
           await bot.sendMessage(chatId, '❌ Ошибка при сохранении изменений');
+          console.error('❌ db.updateProduct вернул false');
         }
       } catch (error) {
-        console.error('Ошибка обновления товара:', error);
-        await bot.sendMessage(chatId, '❌ Ошибка при сохранении');
+        console.error('❌ Ошибка обновления товара:', error);
+        await bot.sendMessage(chatId, `❌ Ошибка при сохранении: ${error.message}`);
       }
       delete tempEditData[chatId];
       break;
@@ -443,12 +464,12 @@ bot.on('message', async (msg) => {
       case 'price':
         const price = parseFloat(text);
         if (isNaN(price) || price <= 0) {
-          await bot.sendMessage(chatId, '❌ Неправильная цена. Введите число (например: 2990):');
+          await bot.sendMessage(chatId, '❌ Неправильная цена. Введите число:');
           return;
         }
         data.price = price;
         data.step = 'description';
-        await bot.sendMessage(chatId, '📄 Введите описание товара:');
+        await bot.sendMessage(chatId, '📝 Введите описание товара:');
         break;
         
       case 'description':
@@ -477,7 +498,7 @@ bot.on('message', async (msg) => {
     switch (editData.editing) {
       case 'name':
         product.name = text;
-        await bot.sendMessage(chatId, `✅ Название изменено на: ${text}\n\nОтправьте /edit_product ${editData.productId} для продолжения`);
+        await bot.sendMessage(chatId, `✅ Название изменено\n\nОтправьте /edit_product ${editData.productId} для продолжения`);
         delete editData.editing;
         break;
         
@@ -538,9 +559,14 @@ bot.on('photo', async (msg) => {
       return;
     }
   } catch (error) {
-    console.error('Ошибка загрузки фото:', error);
+    console.error('❌ Ошибка загрузки фото:', error);
     await bot.sendMessage(chatId, '❌ Ошибка загрузки фото');
   }
+});
+
+// Обработка ошибок polling
+bot.on('polling_error', (error) => {
+  console.error('[polling_error]', error);
 });
 
 module.exports = bot;

@@ -1,61 +1,45 @@
-import React, { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import Catalog from './pages/Catalog';
 import Product from './pages/Product';
 import Favorites from './pages/Favorites';
-import { initTelegramApp, isRunningInTelegram } from './utils/telegram';
-import './index.css';
+import { initTelegramApp } from './utils/telegram';
 
 function App() {
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState(null);
-  const [debugInfo, setDebugInfo] = useState({});
 
   useEffect(() => {
     console.log('🚀 =================================');
     console.log('📱 Telegram Mini App запускается...');
     console.log('🚀 =================================');
+    console.log('🌐 URL:', window.location.href);
     
-    // Собираем отладочную информацию
-    const debug = {
-      url: window.location.href,
-      telegramAvailable: !!window.Telegram?.WebApp,
-      apiUrl: import.meta.env.VITE_API_URL || 'НЕ НАСТРОЕН!',
-      userAgent: navigator.userAgent,
-      timestamp: new Date().toISOString()
-    };
-    
-    console.log('🌐 URL:', debug.url);
-    console.log('📦 Telegram SDK:', debug.telegramAvailable ? '✅ Загружен' : '❌ НЕ загружен');
-    console.log('🔗 API URL:', debug.apiUrl);
-    console.log('🖥️  User Agent:', debug.userAgent);
-    
-    setDebugInfo(debug);
-    
-    // КРИТИЧЕСКАЯ ПРОВЕРКА: API URL
-    if (!import.meta.env.VITE_API_URL) {
-      const errorMsg = '❌ VITE_API_URL не настроен! Создайте frontend/.env файл!';
-      console.error(errorMsg);
-      setError(errorMsg);
-      // Показываем приложение, но с ошибкой
-      setIsReady(true);
-      return;
-    }
+    // Проверяем API URL
+    const apiUrl = import.meta.env.VITE_API_URL;
+    console.log('🔗 API URL:', apiUrl || '❌ НЕ УСТАНОВЛЕН');
+    console.log('🖥️  User Agent:', navigator.userAgent);
     
     try {
-      // Инициализируем Telegram WebApp
+      // Инициализируем Telegram
       console.log('🔧 Инициализация Telegram SDK...');
-      const tg = initTelegramApp();
+      const result = initTelegramApp();
       
-      if (tg) {
+      console.log('📱 Telegram SDK:', result.success ? '✅ Загружен' : '❌ Ошибка');
+      
+      if (result.success) {
         console.log('✅ Telegram SDK инициализирован успешно');
+        console.log('📱 Running in Telegram:', result.isInTelegram);
+        console.log('📱 Запущено в Telegram:', result.isInTelegram ? 'ДА' : 'НЕТ');
+        
+        // Дополнительная отладочная информация
+        if (result.userData) {
+          console.log('👤 User ID:', result.userData.id);
+          console.log('👤 Username:', result.userData.username || 'N/A');
+        }
       } else {
-        console.log('⚠️  Telegram SDK недоступен (работаем в браузере)');
+        console.warn('⚠️  Telegram SDK не загружен:', result.error);
       }
-      
-      // Проверяем запуск в Telegram
-      const inTelegram = isRunningInTelegram();
-      console.log('📱 Запущено в Telegram:', inTelegram ? 'ДА' : 'НЕТ');
       
       console.log('✅ App готов к работе!');
       setIsReady(true);
@@ -83,7 +67,7 @@ function App() {
     );
   }
 
-  // Показываем экран ошибки если критическая проблема
+  // Показываем экран ошибки если критическая проблема с API
   if (error && error.includes('VITE_API_URL')) {
     return (
       <div className="min-h-screen bg-dark-bg flex items-center justify-center p-6">
@@ -102,20 +86,11 @@ function App() {
           <div className="text-gray-300 text-sm space-y-2">
             <p className="font-semibold">Как исправить:</p>
             <ol className="list-decimal list-inside space-y-1 text-xs">
-              <li>Создайте файл <code className="bg-black/50 px-1 rounded">frontend/.env</code></li>
-              <li>Добавьте строку: <code className="bg-black/50 px-1 rounded">VITE_API_URL=http://localhost:3000</code></li>
-              <li>Перезапустите dev сервер</li>
+              <li>Проверьте переменную окружения <code className="bg-black/50 px-1 rounded">VITE_API_URL</code></li>
+              <li>Убедитесь что backend запущен и доступен</li>
+              <li>Перезапустите приложение</li>
             </ol>
           </div>
-          
-          <details className="mt-4">
-            <summary className="text-gray-400 text-xs cursor-pointer hover:text-white">
-              Отладочная информация
-            </summary>
-            <pre className="text-xs text-gray-500 mt-2 bg-black/30 p-2 rounded overflow-auto">
-              {JSON.stringify(debugInfo, null, 2)}
-            </pre>
-          </details>
         </div>
       </div>
     );

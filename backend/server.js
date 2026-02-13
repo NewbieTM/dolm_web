@@ -12,10 +12,12 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Выбор базы данных с fallback
+// Глобальная переменная для БД
 let db;
 let USE_MONGODB = false;
+let botInstance = null;
 
+// Инициализация базы данных
 async function initializeDatabase() {
   const wantsMongoDB = process.env.USE_MONGODB === 'true' && process.env.MONGODB_URI;
   
@@ -26,28 +28,61 @@ async function initializeDatabase() {
       await db.initDatabase();
       USE_MONGODB = true;
       console.log('✅ Используется MongoDB');
+      return true;
     } catch (error) {
       console.error('❌ MongoDB недоступна, переключаемся на JSON:', error.message);
       db = require('./database');
       await db.initDatabase();
       console.log('⚠️  Используется JSON (fallback)');
+      return false;
     }
   } else {
     db = require('./database');
     await db.initDatabase();
     console.log('📁 Используется JSON файлы');
+    return false;
   }
 }
 
-// Запускаем бота только после инициализации БД
-initializeDatabase().then(() => {
-  // Импортируем бота только после инициализации БД
-  const bot = require('./bot');
-  console.log('✅ База данных готова к работе');
-}).catch(err => {
-  console.error('❌ Критическая ошибка инициализации:', err);
-  process.exit(1);
-});
+// Инициализация бота ТОЛЬКО ОДИН РАЗ
+async function initializeBot() {
+  // Если бот уже запущен, не запускаем снова
+  if (botInstance) {
+    console.log('⚠️  Бот уже запущен, пропускаем инициализацию');
+    return;
+  }
+
+  try {
+    // Экспортируем db глобально для бота
+    global.dbInstance = db;
+    global.USE_MONGODB = USE_MONGODB;
+    
+    // Импортируем бота
+    botInstance = require('./bot');
+    console.log('✅ Telegram бот запущен');
+  } catch (error) {
+    console.error('❌ Ошибка запуска бота:', error.message);
+    // Не падаем, если бот не запустился
+  }
+}
+
+// Запуск приложения
+initializeDatabase()
+  .then(async () => {
+    console.log('✅ База данных готова к работе');
+    
+    // Запускаем бота только в production
+    if (process.env.NODE_ENV === 'production') {
+      await initializeBot();
+    } else {
+      console.log('ℹ️  Бот НЕ запущен (dev mode)');
+      console.log('ℹ️  Для запуска бота используйте: node bot.js');
+    }
+  })
+  .catch(err => {
+    console.error('❌ Критическая ошибка инициализации:', err);
+    process.exit(1);
+  });
 
 // ========== ROUTES ==========
 
@@ -57,7 +92,8 @@ app.get('/', (req, res) => {
     status: 'ok', 
     message: 'Clothing Shop API',
     version: '1.0.0',
-    database: USE_MONGODB ? 'MongoDB' : 'JSON'
+    database: USE_MONGODB ? 'MongoDB' : 'JSON',
+    bot: botInstance ? 'active' : 'inactive'
   });
 });
 
@@ -157,39 +193,14 @@ app.get('/api/categories', async (req, res) => {
 
 // ========== FAVORITES ==========
 
-app.get('/api/users/:userId/favorites', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    console.log('GET favorites for user:', userId);
-    
-    const favorites = await db.getFavorites(userId);
-    console.log('Favorites found:', favorites.length);
-    
-    res.json({
-      success: true,
-      data: favorites
-    });
-  } catch (error) {
-    console.error('Ошибка получения избранного:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Ошибка получения избранного'
-    });
-  }
-});
-
 app.post('/api/users/:userId/favorites/:productId', async (req, res) => {
   try {
     const { userId, productId } = req.params;
-    console.log('POST add to favorites:', { userId, productId });
-    
-    const favorites = await db.addToFavorites(userId, productId);
-    console.log('Updated favorites:', favorites);
+    const result = await db.addToFavorites(userId, productId);
     
     res.json({
       success: true,
-      data: favorites,
-      message: 'Добавлено в избранное'
+      data: result
     });
   } catch (error) {
     console.error('Ошибка добавления в избранное:', error);
@@ -203,21 +214,35 @@ app.post('/api/users/:userId/favorites/:productId', async (req, res) => {
 app.delete('/api/users/:userId/favorites/:productId', async (req, res) => {
   try {
     const { userId, productId } = req.params;
-    console.log('DELETE from favorites:', { userId, productId });
-    
-    const favorites = await db.removeFromFavorites(userId, productId);
-    console.log('Updated favorites:', favorites);
+    const result = await db.removeFromFavorites(userId, productId);
     
     res.json({
       success: true,
-      data: favorites,
-      message: 'Удалено из избранного'
+      data: result
     });
   } catch (error) {
     console.error('Ошибка удаления из избранного:', error);
     res.status(500).json({
       success: false,
       error: 'Ошибка удаления из избранного'
+    });
+  }
+});
+
+app.get('/api/users/:userId/favorites', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const favorites = await db.getFavorites(userId);
+    
+    res.json({
+      success: true,
+      data: favorites
+    });
+  } catch (error) {
+    console.error('Ошибка получения избранного:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Ошибка получения избранного'
     });
   }
 });
