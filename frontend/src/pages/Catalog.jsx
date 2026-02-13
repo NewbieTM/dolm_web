@@ -1,63 +1,147 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { getProducts } from '../utils/api';
+import { useState, useEffect } from 'react';
+import ProductCard from '../components/ProductCard';
+import CategoryFilter from '../components/CategoryFilter';
+import SearchBar from '../components/SearchBar';
+import BottomNav from '../components/BottomNav';
+import ContactButton from '../components/ContactButton';
+import { getProducts, getCategories, addToFavorites, removeFromFavorites, getFavorites } from '../utils/api';
 import { getUserId } from '../utils/telegram';
 
 const Catalog = () => {
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [activeCategory, setActiveCategory] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [favorites, setFavorites] = useState([]);
   const userId = getUserId();
-  const navigate = useNavigate();
 
   useEffect(() => {
-    console.log('==========================================');
-    console.log('📱 Catalog MOUNTED!');
+    console.log('📱 Catalog mounted');
     console.log('🆔 User ID:', userId);
-    console.log('==========================================');
-    loadProducts();
+    loadInitialData();
   }, []);
 
-  const loadProducts = async () => {
+  useEffect(() => {
+    if (!loading) {
+      loadProducts();
+    }
+  }, [activeCategory, searchQuery]);
+
+  const loadInitialData = async () => {
     try {
-      console.log('🔄 Fetching products...');
+      console.log('🔄 Loading initial data...');
       setLoading(true);
       setError(null);
       
-      const response = await getProducts({ sort: 'new' });
-      console.log('📦 API Response:', response);
+      // Загружаем категории
+      console.log('📂 Fetching categories...');
+      const categoriesRes = await getCategories().catch(err => {
+        console.error('Categories error:', err);
+        return { success: false, data: [] };
+      });
+      console.log('✅ Categories:', categoriesRes);
       
-      if (response && response.success) {
-        setProducts(response.data || []);
-        console.log('✅ Products loaded:', response.data?.length || 0);
+      // Загружаем избранное
+      console.log('⭐ Fetching favorites...');
+      const favoritesRes = await getFavorites(userId).catch(err => {
+        console.error('Favorites error:', err);
+        return { success: false, data: [] };
+      });
+      console.log('✅ Favorites:', favoritesRes);
+      
+      // Загружаем товары
+      console.log('📦 Fetching products...');
+      const productsRes = await getProducts({ sort: 'new' }).catch(err => {
+        console.error('Products error:', err);
+        return { success: false, data: [] };
+      });
+      console.log('✅ Products:', productsRes);
+
+      if (categoriesRes.success) {
+        setCategories(categoriesRes.data);
+      }
+
+      if (favoritesRes.success) {
+        const favoriteIds = favoritesRes.data.map(p => p.id);
+        setFavorites(favoriteIds);
+      }
+
+      if (productsRes.success) {
+        setProducts(productsRes.data);
+        console.log('✅ Products loaded:', productsRes.data.length);
       } else {
-        console.error('❌ API returned success: false');
         setError('Не удалось загрузить товары');
       }
-    } catch (err) {
-      console.error('❌ FATAL ERROR loading products:', err);
-      console.error('Error details:', err.message);
-      console.error('Error stack:', err.stack);
-      setError(`Ошибка: ${err.message}`);
+    } catch (error) {
+      console.error('❌ Fatal error loading data:', error);
+      setError('Ошибка загрузки данных: ' + error.message);
     } finally {
       setLoading(false);
-      console.log('✅ Loading complete');
+      console.log('✅ Initial data load complete');
     }
   };
 
-  console.log('🔄 Catalog RENDER - loading:', loading, 'products:', products.length, 'error:', error);
+  const loadProducts = async () => {
+    try {
+      const params = {
+        sort: 'new',
+        ...(activeCategory && { category: activeCategory }),
+        ...(searchQuery && { search: searchQuery })
+      };
 
-  // Ошибка
+      console.log('🔄 Loading products with filters:', params);
+      const response = await getProducts(params);
+
+      if (response.success) {
+        setProducts(response.data);
+        console.log('✅ Products updated:', response.data.length);
+      }
+    } catch (error) {
+      console.error('❌ Error loading products:', error);
+    }
+  };
+
+  const handleCategoryChange = (category) => {
+    console.log('📂 Category changed:', category);
+    setActiveCategory(category);
+  };
+
+  const handleSearch = (query) => {
+    console.log('🔍 Search query:', query);
+    setSearchQuery(query);
+  };
+
+  const handleToggleFavorite = async (productId) => {
+    try {
+      const isFav = favorites.includes(productId);
+      
+      if (isFav) {
+        await removeFromFavorites(userId, productId);
+        setFavorites(favorites.filter(id => id !== productId));
+      } else {
+        await addToFavorites(userId, productId);
+        setFavorites([...favorites, productId]);
+      }
+    } catch (error) {
+      console.error('❌ Favorite toggle error:', error);
+    }
+  };
+
+  // Показываем ошибку
   if (error) {
     return (
       <div className="min-h-screen bg-dark-bg flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-red-900/20 border border-red-500 rounded-2xl p-6 text-center">
-          <div className="text-6xl mb-4">⚠️</div>
-          <h2 className="text-xl font-bold text-red-500 mb-2">Ошибка</h2>
+        <div className="max-w-md w-full bg-red-900/20 border border-red-500 rounded-2xl p-6">
+          <div className="text-center mb-4">
+            <div className="text-6xl mb-4">⚠️</div>
+            <h2 className="text-xl font-bold text-red-500 mb-2">Ошибка</h2>
+          </div>
           <p className="text-red-400 text-sm mb-4">{error}</p>
           <button
-            onClick={loadProducts}
-            className="w-full bg-accent text-white font-semibold py-3 rounded-xl"
+            onClick={loadInitialData}
+            className="w-full bg-accent text-white font-semibold py-3 rounded-xl hover:bg-accent/80 transition"
           >
             Попробовать снова
           </button>
@@ -66,92 +150,70 @@ const Catalog = () => {
     );
   }
 
-  // Загрузка
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-dark-bg flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-accent border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-white text-lg">Загрузка товаров...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Пусто
-  if (products.length === 0) {
-    return (
-      <div className="min-h-screen bg-dark-bg flex items-center justify-center p-6">
-        <div className="text-center">
-          <div className="text-6xl mb-4">📦</div>
-          <h3 className="text-xl font-semibold text-white mb-2">Товаров нет</h3>
-          <p className="text-gray-400">Скоро здесь появятся товары</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Каталог
   return (
     <div className="min-h-screen bg-dark-bg pb-20">
       {/* Заголовок */}
-      <header className="sticky top-0 z-20 bg-dark-bg border-b border-gray-800 p-4">
-        <h1 className="text-2xl font-bold text-white">Каталог</h1>
-        <p className="text-sm text-gray-400 mt-1">Товаров: {products.length}</p>
+      <header className="sticky top-0 z-20 bg-dark-bg/95 backdrop-blur-lg border-b border-gray-800">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <h1 className="text-2xl font-bold text-white mb-4">Каталог</h1>
+          <SearchBar onSearch={handleSearch} />
+        </div>
       </header>
 
-      {/* Товары */}
-      <div className="p-4">
-        <div className="grid grid-cols-2 gap-4">
-          {products.map((product) => (
-            <div
-              key={product.id}
-              onClick={() => {
-                console.log('🔗 Opening product:', product.id);
-                navigate(`/product/${product.id}`);
-              }}
-              className="bg-dark-card rounded-2xl overflow-hidden cursor-pointer hover:scale-105 transition-transform"
-            >
-              {/* Фото */}
-              <div className="aspect-square bg-gray-800 relative">
-                {product.photos && product.photos[0] ? (
-                  <img
-                    src={product.photos[0]}
-                    alt={product.name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-gray-600">
-                    <span className="text-4xl">📷</span>
-                  </div>
-                )}
-              </div>
+      {/* Контент */}
+      <div className="max-w-7xl mx-auto">
+        {/* Фильтр категорий */}
+        <div className="px-4 pt-4">
+          <CategoryFilter
+            categories={categories}
+            activeCategory={activeCategory}
+            onCategoryChange={handleCategoryChange}
+          />
+        </div>
 
-              {/* Инфо */}
-              <div className="p-4">
-                <h3 className="text-white font-semibold text-base mb-2 line-clamp-2">
-                  {product.name}
-                </h3>
-                <div className="flex items-center justify-between">
-                  <span className="text-accent text-lg font-bold">
-                    {product.price?.toLocaleString('ru-RU')} ₽
-                  </span>
-                  {product.views > 0 && (
-                    <span className="text-gray-400 text-sm">
-                      👁 {product.views}
-                    </span>
-                  )}
+        {/* Товары */}
+        <div className="px-4 pt-4">
+          {loading ? (
+            // Скелетоны загрузки
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="bg-dark-card rounded-2xl overflow-hidden">
+                  <div className="aspect-square skeleton" />
+                  <div className="p-4 space-y-2">
+                    <div className="h-4 skeleton rounded" />
+                    <div className="h-6 skeleton rounded w-1/2" />
+                  </div>
                 </div>
-              </div>
+              ))}
             </div>
-          ))}
+          ) : products.length === 0 ? (
+            // Пустое состояние
+            <div className="text-center py-12">
+              <div className="text-6xl mb-4">📦</div>
+              <h3 className="text-xl font-semibold text-white mb-2">Товаров нет</h3>
+              <p className="text-gray-400">Скоро здесь появятся товары</p>
+            </div>
+          ) : (
+            // Список товаров
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              {products.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  isFavorite={favorites.includes(product.id)}
+                  onToggleFavorite={handleToggleFavorite}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Debug info */}
-      <div className="fixed bottom-0 left-0 right-0 bg-black/80 text-white text-xs p-2 font-mono">
-        <div>📱 Catalog Running | Products: {products.length} | User: {userId}</div>
-      </div>
+      {/* Нижняя навигация */}
+      <BottomNav />
+
+      {/* Кнопка контакта */}
+      <ContactButton />
     </div>
   );
 };
