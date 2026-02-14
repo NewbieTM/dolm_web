@@ -14,9 +14,9 @@ const Product = ({ productId, navigate }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
   const [startX, setStartX] = useState(0);
+  const [isPointerActive, setIsPointerActive] = useState(false); // НОВЫЙ флаг!
 
   const imageContainerRef = useRef(null);
-  const blockingActiveRef = useRef(false); // Флаг что блокировка активна
 
   useEffect(() => {
     console.log('📱 Product mounted, ID:', productId);
@@ -29,26 +29,8 @@ const Product = ({ productId, navigate }) => {
       });
     }
 
-    // Добавляем CSS для блокировки overscroll
-    const style = document.createElement('style');
-    style.id = 'gallery-block-styles';
-    style.textContent = `
-      body.gallery-active {
-        overscroll-behavior: none !important;
-        overflow: hidden !important;
-        touch-action: none !important;
-        -webkit-overflow-scrolling: auto !important;
-      }
-    `;
-    document.head.appendChild(style);
-
     return () => {
       hideBackButton();
-      // Убираем CSS
-      const styleEl = document.getElementById('gallery-block-styles');
-      if (styleEl) styleEl.remove();
-      // Убираем класс
-      document.body.classList.remove('gallery-active');
     };
   }, [productId]);
 
@@ -106,104 +88,78 @@ const Product = ({ productId, navigate }) => {
     vibrate('light');
   };
 
-  // ГЛОБАЛЬНАЯ блокировка всех событий
-  const globalBlockHandler = useRef((e) => {
-    if (blockingActiveRef.current) {
+  // ИСПРАВЛЕННЫЙ свайп через POINTER EVENTS
+  const handlePointerDown = (e) => {
+    if (!product || product.photos.length <= 1) return;
+    
+    // Захватываем pointer - теперь все события придут к нам
+    e.currentTarget.setPointerCapture(e.pointerId);
+    
+    setIsPointerActive(true);
+    setIsDragging(true);
+    setStartX(e.clientX);
+    setDragOffset(0);
+    
+    console.log('👇 Pointer down');
+  };
+
+  const handlePointerMove = (e) => {
+    // ВСЕГДА блокируем если pointer активен
+    if (isPointerActive) {
       e.preventDefault();
       e.stopPropagation();
-      e.stopImmediatePropagation();
-    }
-  });
-
-  const enableGlobalBlock = () => {
-    if (blockingActiveRef.current) return;
-    
-    blockingActiveRef.current = true;
-    document.body.classList.add('gallery-active');
-    
-    console.log('🔒 Глобальная блокировка ВКЛЮЧЕНА');
-    
-    // Добавляем обработчики на document с capture: true
-    const options = { passive: false, capture: true };
-    document.addEventListener('touchmove', globalBlockHandler.current, options);
-    document.addEventListener('pointermove', globalBlockHandler.current, options);
-    document.addEventListener('touchstart', globalBlockHandler.current, options);
-    document.addEventListener('touchend', globalBlockHandler.current, options);
-  };
-
-  const disableGlobalBlock = () => {
-    if (!blockingActiveRef.current) return;
-    
-    blockingActiveRef.current = false;
-    document.body.classList.remove('gallery-active');
-    
-    console.log('🔓 Глобальная блокировка ВЫКЛЮЧЕНА');
-    
-    // Убираем обработчики
-    const options = { passive: false, capture: true };
-    document.removeEventListener('touchmove', globalBlockHandler.current, options);
-    document.removeEventListener('pointermove', globalBlockHandler.current, options);
-    document.removeEventListener('touchstart', globalBlockHandler.current, options);
-    document.removeEventListener('touchend', globalBlockHandler.current, options);
-  };
-
-  const handleTouchStart = (e) => {
-    if (!product || product.photos.length <= 1) {
-      // Даже если свайп не работает - блокируем события
-      enableGlobalBlock();
-      return;
     }
     
-    enableGlobalBlock();
-    setIsDragging(true);
-    setStartX(e.touches[0].clientX);
-    setDragOffset(0);
-  };
-
-  const handleTouchMove = (e) => {
     if (!isDragging || !product) return;
     
-    const currentX = e.touches[0].clientX;
+    const currentX = e.clientX;
     const diffX = currentX - startX;
     
+    // Ограничиваем движение
     const maxDrag = 100;
     const limitedDiff = Math.max(-maxDrag, Math.min(maxDrag, diffX));
     
     setDragOffset(limitedDiff);
   };
 
-  const handleTouchEnd = () => {
-    if (!product) {
-      disableGlobalBlock();
+  const handlePointerUp = (e) => {
+    if (!isDragging || !product) {
+      setIsPointerActive(false);
       return;
     }
     
-    if (isDragging && product.photos.length > 1) {
-      const threshold = 50;
-      
-      if (Math.abs(dragOffset) > threshold) {
-        if (dragOffset < 0) {
-          setCurrentImageIndex((prev) => 
-            prev === product.photos.length - 1 ? prev : prev + 1
-          );
-          vibrate('light');
-        } else {
-          setCurrentImageIndex((prev) => 
-            prev === 0 ? prev : prev - 1
-          );
-          vibrate('light');
-        }
+    console.log('👆 Pointer up');
+    
+    const threshold = 50;
+    
+    if (Math.abs(dragOffset) > threshold) {
+      if (dragOffset < 0) {
+        // Свайп влево - следующее фото
+        setCurrentImageIndex((prev) => 
+          prev === product.photos.length - 1 ? prev : prev + 1
+        );
+        vibrate('light');
+      } else {
+        // Свайп вправо - предыдущее фото
+        setCurrentImageIndex((prev) => 
+          prev === 0 ? prev : prev - 1
+        );
+        vibrate('light');
       }
     }
     
     setIsDragging(false);
     setDragOffset(0);
     
-    // ВАЖНО: Небольшая задержка перед отключением блокировки
-    // Это гарантирует что палец точно оторвался
-    setTimeout(() => {
-      disableGlobalBlock();
-    }, 100);
+    // ВАЖНО: сбрасываем флаг только здесь!
+    setIsPointerActive(false);
+  };
+
+  const handlePointerCancel = (e) => {
+    console.log('❌ Pointer cancel');
+    setIsDragging(false);
+    setDragOffset(0);
+    setIsPointerActive(false);
   };
 
   const handleBackClick = () => {
@@ -238,6 +194,7 @@ const Product = ({ productId, navigate }) => {
     );
   }
 
+  // Вычисляем transform для плавного свайпа
   const getImageTransform = (index) => {
     const position = index - currentImageIndex;
     const baseTranslate = position * 100;
@@ -252,6 +209,7 @@ const Product = ({ productId, navigate }) => {
 
   return (
     <div className="min-h-screen bg-dark-bg pb-24">
+      {/* Кнопка назад для браузера */}
       {!isRunningInTelegram() && (
         <button
           onClick={handleBackClick}
@@ -264,6 +222,7 @@ const Product = ({ productId, navigate }) => {
       )}
 
       <div className="max-w-5xl mx-auto">
+        {/* Галерея с POINTER EVENTS */}
         <div className="relative">
           <div 
             ref={imageContainerRef}
@@ -272,13 +231,14 @@ const Product = ({ productId, navigate }) => {
               height: 'auto',
               maxHeight: '600px',
               aspectRatio: '1/1',
-              touchAction: 'none'
+              touchAction: 'none' // Блокируем стандартное поведение
             }}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-            onTouchCancel={handleTouchEnd}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
           >
+            {/* Все фото рендерятся одновременно для плавного свайпа */}
             {product.photos.map((photo, index) => (
               <div
                 key={index}
@@ -299,6 +259,7 @@ const Product = ({ productId, navigate }) => {
               </div>
             ))}
             
+            {/* Кнопка избранного */}
             <button
               onClick={handleFavoriteClick}
               className="absolute top-4 right-4 w-12 h-12 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center transition-colors duration-200 hover:bg-black/70 z-10"
@@ -316,6 +277,7 @@ const Product = ({ productId, navigate }) => {
               </svg>
             </button>
 
+            {/* Индикаторы фото */}
             {product.photos.length > 1 && (
               <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-2 px-4 z-10">
                 {product.photos.map((_, index) => (
@@ -333,6 +295,7 @@ const Product = ({ productId, navigate }) => {
             )}
           </div>
 
+          {/* Миниатюры для desktop */}
           {product.photos.length > 1 && (
             <div className="hidden md:block px-4 pt-4">
               <div className="flex gap-2 overflow-x-auto pb-2">
@@ -358,6 +321,7 @@ const Product = ({ productId, navigate }) => {
           )}
         </div>
 
+        {/* Информация о товаре */}
         <div className="p-6 md:p-8">
           <div className="mb-3">
             <span className="inline-block px-3 py-1 bg-dark-card rounded-full text-sm text-gray-400">
@@ -392,6 +356,7 @@ const Product = ({ productId, navigate }) => {
             </p>
           </div>
 
+          {/* Кнопка связаться с менеджером */}
           {managerUsername && (
             <button
               onClick={handleContactManager}
