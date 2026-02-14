@@ -14,7 +14,6 @@ const Product = ({ productId, navigate }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
   const [startX, setStartX] = useState(0);
-  const [startY, setStartY] = useState(0);
 
   const imageContainerRef = useRef(null);
 
@@ -88,38 +87,24 @@ const Product = ({ productId, navigate }) => {
     vibrate('light');
   };
 
-  // ИСПРАВЛЕННЫЙ свайп - начало
+  // ПОЛНАЯ БЛОКИРОВКА вертикального движения - начало
   const handleTouchStart = (e) => {
     if (!product || product.photos.length <= 1) return;
     
     setIsDragging(true);
     setStartX(e.touches[0].clientX);
-    setStartY(e.touches[0].clientY);
     setDragOffset(0);
   };
 
-  // ИСПРАВЛЕННЫЙ свайп - движение
+  // ПОЛНАЯ БЛОКИРОВКА вертикального движения - движение
   const handleTouchMove = (e) => {
     if (!isDragging || !product) return;
     
+    // ВСЕГДА блокируем стандартное поведение
+    e.preventDefault();
+    
     const currentX = e.touches[0].clientX;
-    const currentY = e.touches[0].clientY;
-    
     const diffX = currentX - startX;
-    const diffY = currentY - startY;
-    
-    // Если вертикальное движение больше горизонтального - отменяем свайп
-    // Это предотвращает сворачивание mini app
-    if (Math.abs(diffY) > Math.abs(diffX)) {
-      setIsDragging(false);
-      setDragOffset(0);
-      return;
-    }
-    
-    // Предотвращаем вертикальную прокрутку когда свайпаем горизонтально
-    if (Math.abs(diffX) > 10) {
-      e.preventDefault();
-    }
     
     // Ограничиваем движение
     const maxDrag = 100;
@@ -128,7 +113,7 @@ const Product = ({ productId, navigate }) => {
     setDragOffset(limitedDiff);
   };
 
-  // Плавный свайп - конец
+  // Конец касания
   const handleTouchEnd = () => {
     if (!isDragging || !product) return;
     
@@ -165,7 +150,6 @@ const Product = ({ productId, navigate }) => {
     
     vibrate('medium');
     
-    // Сообщение для конкретного товара
     const message = `Здравствуйте, хотелось бы заказать ${product.name} за ${product.price.toLocaleString('ru-RU')} ₽. В наличии сейчас?`;
     const encodedMessage = encodeURIComponent(message);
     
@@ -216,7 +200,7 @@ const Product = ({ productId, navigate }) => {
       )}
 
       <div className="max-w-5xl mx-auto">
-        {/* Галерея с ИСПРАВЛЕННЫМ плавным свайпом */}
+        {/* Галерея с ПОЛНОЙ блокировкой вертикального движения */}
         <div className="relative">
           <div 
             ref={imageContainerRef}
@@ -225,7 +209,7 @@ const Product = ({ productId, navigate }) => {
               height: 'auto',
               maxHeight: '600px',
               aspectRatio: '1/1',
-              touchAction: 'pan-y' // Разрешаем только вертикальную прокрутку страницы
+              touchAction: 'none' // ПОЛНОСТЬЮ блокируем стандартное поведение
             }}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}

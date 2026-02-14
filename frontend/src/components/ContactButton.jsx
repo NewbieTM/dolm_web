@@ -51,7 +51,7 @@ const ContactButton = ({ productName, productPrice }) => {
     setShowTooltip(false);
     
     // Сообщение для общей кнопки - подталкивает прикрепить фото
-    const message = 'Здравствуйте, хотел бы заказать товар на фото. Сколько он будет стоить?';
+    const message = 'Здравствуйте, хотел бы заказать свой товар с фото. Сколько это будет стоить?';
     const encodedMessage = encodeURIComponent(message);
     
     openTelegramLink(`https://t.me/${managerUsername}?text=${encodedMessage}`);

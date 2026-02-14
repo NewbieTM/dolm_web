@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { vibrate } from '../utils/telegram';
 
-const ProductCard = ({ product, isFavorite, onToggleFavorite, onNavigate }) => {
+const ProductCard = memo(({ product, isFavorite, onToggleFavorite, onNavigate }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
 
   const handleClick = () => {
@@ -81,6 +81,15 @@ const ProductCard = ({ product, isFavorite, onToggleFavorite, onNavigate }) => {
       </div>
     </div>
   );
-};
+}, (prevProps, nextProps) => {
+  // Оптимизация: перерендериваем только если изменились важные пропсы
+  return (
+    prevProps.product.id === nextProps.product.id &&
+    prevProps.isFavorite === nextProps.isFavorite &&
+    prevProps.product.views === nextProps.product.views
+  );
+});
+
+ProductCard.displayName = 'ProductCard';
 
 export default ProductCard;
