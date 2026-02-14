@@ -3,10 +3,11 @@ import Catalog from './pages/Catalog';
 import Product from './pages/Product';
 import Favorites from './pages/Favorites';
 import { initTelegramApp, isRunningInTelegram } from './utils/telegram';
+import { initTooltipTimer } from './utils/tooltipManager';
 
 function App() {
   const [isReady, setIsReady] = useState(false);
-  const [currentPage, setCurrentPage] = useState('catalog'); // catalog, product, favorites
+  const [currentPage, setCurrentPage] = useState('catalog');
   const [currentProductId, setCurrentProductId] = useState(null);
 
   useEffect(() => {
@@ -29,6 +30,10 @@ function App() {
       const inTelegram = isRunningInTelegram();
       console.log('📱 В Telegram:', inTelegram ? 'ДА' : 'НЕТ');
       
+      // Инициализируем глобальный таймер подсказки
+      console.log('⏱️  Инициализация таймера подсказки...');
+      initTooltipTimer();
+      
       console.log('✅ App готов к работе!');
       setIsReady(true);
     } catch (err) {
@@ -39,7 +44,6 @@ function App() {
     console.log('🚀 =================================');
   }, []);
 
-  // Функции навигации
   const navigate = {
     toCatalog: () => {
       console.log('📍 Навигация: Каталог');
@@ -63,7 +67,6 @@ function App() {
     }
   };
 
-  // Loader
   if (!isReady) {
     return (
       <div className="min-h-screen bg-dark-bg flex items-center justify-center">
@@ -75,7 +78,6 @@ function App() {
     );
   }
 
-  // Рендер текущей страницы
   console.log('🔄 Рендер App - Страница:', currentPage, 'Product ID:', currentProductId);
 
   return (

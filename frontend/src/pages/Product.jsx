@@ -14,6 +14,7 @@ const Product = ({ productId, navigate }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
   const [startX, setStartX] = useState(0);
+  const [startY, setStartY] = useState(0);
 
   const imageContainerRef = useRef(null);
 
@@ -87,25 +88,42 @@ const Product = ({ productId, navigate }) => {
     vibrate('light');
   };
 
-  // Плавный свайп - начало
+  // ИСПРАВЛЕННЫЙ свайп - начало
   const handleTouchStart = (e) => {
     if (!product || product.photos.length <= 1) return;
     
     setIsDragging(true);
     setStartX(e.touches[0].clientX);
+    setStartY(e.touches[0].clientY);
     setDragOffset(0);
   };
 
-  // Плавный свайп - движение
+  // ИСПРАВЛЕННЫЙ свайп - движение
   const handleTouchMove = (e) => {
     if (!isDragging || !product) return;
     
     const currentX = e.touches[0].clientX;
-    const diff = currentX - startX;
+    const currentY = e.touches[0].clientY;
     
-    // Ограничиваем движение чтобы не слишком далеко тянуть
+    const diffX = currentX - startX;
+    const diffY = currentY - startY;
+    
+    // Если вертикальное движение больше горизонтального - отменяем свайп
+    // Это предотвращает сворачивание mini app
+    if (Math.abs(diffY) > Math.abs(diffX)) {
+      setIsDragging(false);
+      setDragOffset(0);
+      return;
+    }
+    
+    // Предотвращаем вертикальную прокрутку когда свайпаем горизонтально
+    if (Math.abs(diffX) > 10) {
+      e.preventDefault();
+    }
+    
+    // Ограничиваем движение
     const maxDrag = 100;
-    const limitedDiff = Math.max(-maxDrag, Math.min(maxDrag, diff));
+    const limitedDiff = Math.max(-maxDrag, Math.min(maxDrag, diffX));
     
     setDragOffset(limitedDiff);
   };
@@ -116,7 +134,7 @@ const Product = ({ productId, navigate }) => {
     
     setIsDragging(false);
     
-    const threshold = 50; // Минимальное расстояние для переключения
+    const threshold = 50;
     
     if (Math.abs(dragOffset) > threshold) {
       if (dragOffset < 0) {
@@ -134,7 +152,6 @@ const Product = ({ productId, navigate }) => {
       }
     }
     
-    // Сбрасываем offset
     setDragOffset(0);
   };
 
@@ -148,7 +165,8 @@ const Product = ({ productId, navigate }) => {
     
     vibrate('medium');
     
-    const message = `Здравствуйте!\n\nИнтересует товар: ${product.name}\nЦена: ${product.price.toLocaleString('ru-RU')} ₽`;
+    // Сообщение для конкретного товара
+    const message = `Здравствуйте, хотелось бы заказать ${product.name} за ${product.price.toLocaleString('ru-RU')} ₽. В наличии сейчас?`;
     const encodedMessage = encodeURIComponent(message);
     
     openTelegramLink(`https://t.me/${managerUsername}?text=${encodedMessage}`);
@@ -175,7 +193,6 @@ const Product = ({ productId, navigate }) => {
     const position = index - currentImageIndex;
     const baseTranslate = position * 100;
     
-    // Если тянем текущее фото
     if (index === currentImageIndex && isDragging) {
       const dragPercent = (dragOffset / (imageContainerRef.current?.offsetWidth || 1)) * 100;
       return `translateX(${baseTranslate + dragPercent}%)`;
@@ -199,16 +216,16 @@ const Product = ({ productId, navigate }) => {
       )}
 
       <div className="max-w-5xl mx-auto">
-        {/* Галерея с плавным свайпом */}
+        {/* Галерея с ИСПРАВЛЕННЫМ плавным свайпом */}
         <div className="relative">
           <div 
             ref={imageContainerRef}
-            className="relative w-full overflow-hidden bg-dark-card"
+            className="relative w-full overflow-hidden bg-dark-card select-none"
             style={{ 
               height: 'auto',
               maxHeight: '600px',
               aspectRatio: '1/1',
-              touchAction: 'pan-y' // Позволяем вертикальную прокрутку
+              touchAction: 'pan-y' // Разрешаем только вертикальную прокрутку страницы
             }}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
@@ -229,7 +246,7 @@ const Product = ({ productId, navigate }) => {
                   src={photo}
                   alt={`${product.name} - фото ${index + 1}`}
                   className="w-full h-full object-cover md:object-contain md:bg-black"
-                  style={{ userSelect: 'none' }}
+                  style={{ userSelect: 'none', pointerEvents: 'none' }}
                   draggable={false}
                 />
               </div>

@@ -23,34 +23,37 @@ console.log('📦 БД в боте:', USE_MONGODB ? 'MongoDB ✅' : 'JSON 📁')
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
-// Путь к файлу с админами
 const ADMINS_FILE = path.join(__dirname, 'data', 'admins.json');
 
-// Загрузка списка админов
+// Новые категории
+const CATEGORIES = [
+  { text: '👕 Худи', value: 'Худи' },
+  { text: '👔 Футболки', value: 'Футболки' },
+  { text: '👟 Обувь', value: 'Обувь' },
+  { text: '👜 Сумки', value: 'Сумки' },
+  { text: '💄 Косметика', value: 'Косметика' }
+];
+
 async function loadAdmins() {
   try {
     const data = await fs.readFile(ADMINS_FILE, 'utf8');
     return JSON.parse(data);
   } catch (error) {
-    // Если файл не существует, создаём с главным админом
     const admins = [ADMIN_ID];
     await saveAdmins(admins);
     return admins;
   }
 }
 
-// Сохранение списка админов
 async function saveAdmins(admins) {
   await fs.writeFile(ADMINS_FILE, JSON.stringify(admins, null, 2));
 }
 
-// Проверка является ли пользователь админом
 async function isAdmin(userId) {
   const admins = await loadAdmins();
   return admins.includes(userId);
 }
 
-// Хранилище для временных данных
 const tempProductData = {};
 const tempEditData = {};
 
@@ -103,7 +106,6 @@ bot.onText(/\/list_admins/, async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
   
-  // Только главный админ может видеть список
   if (userId !== ADMIN_ID) {
     await bot.sendMessage(chatId, '❌ Только главный админ может просматривать список админов');
     return;
@@ -137,7 +139,6 @@ bot.onText(/\/add_admin (.+)/, async (msg, match) => {
   const userId = msg.from.id;
   const newAdminId = parseInt(match[1]);
   
-  // Только главный админ может добавлять админов
   if (userId !== ADMIN_ID) {
     await bot.sendMessage(chatId, '❌ Только главный админ может добавлять админов');
     return;
@@ -156,7 +157,6 @@ bot.onText(/\/add_admin (.+)/, async (msg, match) => {
       return;
     }
     
-    // Проверяем существует ли пользователь
     try {
       const chat = await bot.getChat(newAdminId);
       const name = chat.first_name || chat.username || `ID: ${newAdminId}`;
@@ -166,7 +166,6 @@ bot.onText(/\/add_admin (.+)/, async (msg, match) => {
       
       await bot.sendMessage(chatId, `✅ Пользователь ${name} (${newAdminId}) добавлен в админы!`);
       
-      // Уведомляем нового админа
       try {
         await bot.sendMessage(newAdminId, `
 🎉 Вам предоставлены права администратора!
@@ -174,7 +173,7 @@ bot.onText(/\/add_admin (.+)/, async (msg, match) => {
 Используйте /admin для просмотра доступных команд.
         `);
       } catch (error) {
-        // Не удалось отправить сообщение новому админу (возможно бот заблокирован)
+        // Бот заблокирован у пользователя
       }
       
     } catch (error) {
@@ -191,7 +190,6 @@ bot.onText(/\/remove_admin (.+)/, async (msg, match) => {
   const userId = msg.from.id;
   const adminIdToRemove = parseInt(match[1]);
   
-  // Только главный админ может удалять админов
   if (userId !== ADMIN_ID) {
     await bot.sendMessage(chatId, '❌ Только главный админ может удалять админов');
     return;
@@ -202,7 +200,6 @@ bot.onText(/\/remove_admin (.+)/, async (msg, match) => {
     return;
   }
   
-  // Нельзя удалить главного админа
   if (adminIdToRemove === ADMIN_ID) {
     await bot.sendMessage(chatId, '❌ Нельзя удалить главного админа');
     return;
@@ -221,11 +218,10 @@ bot.onText(/\/remove_admin (.+)/, async (msg, match) => {
     
     await bot.sendMessage(chatId, `✅ Админ ${adminIdToRemove} удалён`);
     
-    // Уведомляем бывшего админа
     try {
       await bot.sendMessage(adminIdToRemove, '⚠️ Ваши права администратора были отозваны');
     } catch (error) {
-      // Не удалось отправить сообщение
+      // Не удалось отправить
     }
   } catch (error) {
     console.error('❌ Ошибка:', error);
@@ -233,7 +229,7 @@ bot.onText(/\/remove_admin (.+)/, async (msg, match) => {
   }
 });
 
-// ========== ОСТАЛЬНЫЕ КОМАНДЫ (ПРОВЕРКА АДМИНА) ==========
+// ========== ТОВАРЫ ==========
 
 bot.onText(/\/add_product/, async (msg) => {
   const chatId = msg.chat.id;
@@ -253,7 +249,6 @@ bot.onText(/\/edit_product (.+)/, async (msg, match) => {
   if (!(await isAdmin(userId))) return;
   
   try {
-    console.log('📝 Запрос редактирования товара:', productId);
     const product = await db.getProductById(productId);
     
     if (!product) {
@@ -307,9 +302,7 @@ bot.onText(/\/list_products/, async (msg) => {
   if (!(await isAdmin(userId))) return;
   
   try {
-    console.log('📋 Запрос списка товаров из БД:', USE_MONGODB ? 'MongoDB' : 'JSON');
     const products = await db.getAllProducts();
-    console.log('📦 Получено товаров:', products.length);
     
     if (products.length === 0) {
       await bot.sendMessage(chatId, '📦 Товаров нет\n\n/add_product для добавления');
@@ -341,12 +334,10 @@ bot.onText(/\/delete_product (.+)/, async (msg, match) => {
   if (!(await isAdmin(userId))) return;
   
   try {
-    console.log('🗑️  Удаление товара:', productId);
     const deleted = await db.deleteProduct(productId);
     
     if (deleted) {
       await bot.sendMessage(chatId, `✅ Товар ${productId} удалён`);
-      console.log('✅ Товар удалён');
     } else {
       await bot.sendMessage(chatId, `❌ Товар ${productId} не найден`);
     }
@@ -398,14 +389,6 @@ bot.onText(/\/done/, async (msg) => {
       return;
     }
     
-    console.log('💾 Сохранение товара в БД:', USE_MONGODB ? 'MongoDB' : 'JSON');
-    console.log('📦 Данные:', {
-      name: data.name,
-      price: data.price,
-      category: data.category,
-      photos: data.photos.length
-    });
-    
     const product = await db.addProduct({
       name: data.name,
       price: data.price,
@@ -415,8 +398,6 @@ bot.onText(/\/done/, async (msg) => {
     });
     
     if (product) {
-      console.log('✅ Товар добавлен:', product.id);
-      
       await bot.sendMessage(chatId, `
 ✅ Товар добавлен!
 
@@ -429,7 +410,6 @@ ID: ${product.id}
 📦 БД: ${USE_MONGODB ? 'MongoDB ✅' : 'JSON 📁'}
       `);
     } else {
-      console.error('❌ db.addProduct вернул null');
       await bot.sendMessage(chatId, '❌ Ошибка сохранения в БД');
     }
     
@@ -473,7 +453,7 @@ bot.on('callback_query', async (query) => {
     return;
   }
   
-  // Добавление товара - выбор категории
+  // Выбор категории при добавлении
   if (query.data.startsWith('cat_') && data) {
     const category = query.data.replace('cat_', '');
     data.category = category;
@@ -489,7 +469,6 @@ bot.on('callback_query', async (query) => {
     return;
   }
   
-  // Редактирование товара
   if (!editData) return;
   
   switch (query.data) {
@@ -514,14 +493,15 @@ bot.on('callback_query', async (query) => {
     case 'edit_category':
       editData.editing = 'category';
       await bot.answerCallbackQuery(query.id);
+      
+      // Создаём кнопки из массива категорий
+      const categoryButtons = CATEGORIES.map(cat => [
+        { text: cat.text, callback_data: `editcat_${cat.value}` }
+      ]);
+      
       await bot.sendMessage(chatId, '🏷️ Выберите категорию:', {
         reply_markup: {
-          inline_keyboard: [
-            [{ text: '👟 Обувь', callback_data: 'editcat_Обувь' }],
-            [{ text: '👕 Худи', callback_data: 'editcat_Худи' }],
-            [{ text: '👔 Футболки', callback_data: 'editcat_Футболки' }],
-            [{ text: '🎒 Аксессуары', callback_data: 'editcat_Аксессуары' }]
-          ]
+          inline_keyboard: categoryButtons
         }
       });
       break;
@@ -540,7 +520,6 @@ bot.on('callback_query', async (query) => {
     case 'edit_save':
       await bot.answerCallbackQuery(query.id, { text: 'Сохраняем...' });
       try {
-        console.log('💾 Обновление товара:', editData.productId);
         const success = await db.updateProduct(editData.productId, editData.product);
         
         if (success) {
@@ -553,7 +532,6 @@ ID: ${editData.productId}
 
 📦 БД: ${USE_MONGODB ? 'MongoDB ✅' : 'JSON 📁'}
           `);
-          console.log('✅ Товар обновлен');
         } else {
           await bot.sendMessage(chatId, '❌ Ошибка сохранения');
         }
@@ -616,14 +594,15 @@ bot.on('message', async (msg) => {
       case 'description':
         data.description = text;
         data.step = 'category';
+        
+        // Создаём кнопки из массива категорий
+        const categoryButtons = CATEGORIES.map(cat => [
+          { text: cat.text, callback_data: `cat_${cat.value}` }
+        ]);
+        
         await bot.sendMessage(chatId, '🏷️ Выберите категорию:', {
           reply_markup: {
-            inline_keyboard: [
-              [{ text: '👟 Обувь', callback_data: 'cat_Обувь' }],
-              [{ text: '👕 Худи', callback_data: 'cat_Худи' }],
-              [{ text: '👔 Футболки', callback_data: 'cat_Футболки' }],
-              [{ text: '🎒 Аксессуары', callback_data: 'cat_Аксессуары' }]
-            ]
+            inline_keyboard: categoryButtons
           }
         });
         break;
@@ -686,14 +665,12 @@ bot.on('photo', async (msg) => {
       return;
     }
     
-    // Добавление товара
     if (data && data.step === 'photo') {
       data.photos.push(photoUrl);
       await bot.sendMessage(chatId, `✅ Фото ${data.photos.length} добавлено\n\nМожете добавить ещё или /done`);
       return;
     }
     
-    // Редактирование товара
     if (editData && editData.editing === 'photos') {
       editData.newPhotos.push(photoUrl);
       await bot.sendMessage(chatId, `✅ Фото ${editData.newPhotos.length} добавлено\n\n/done_photos когда закончите`);

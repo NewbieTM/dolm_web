@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { vibrate, openTelegramLink } from '../utils/telegram';
 import { getConfig } from '../utils/api';
+import { shouldShowTooltip, markTooltipShown } from '../utils/tooltipManager';
 
 const ContactButton = ({ productName, productPrice }) => {
   const [managerUsername, setManagerUsername] = useState('');
@@ -9,22 +10,16 @@ const ContactButton = ({ productName, productPrice }) => {
   useEffect(() => {
     loadConfig();
     
-    // Показываем подсказку через 2 секунды после загрузки
-    const tooltipTimer = setTimeout(() => {
-      setShowTooltip(true);
-      // Скрываем через 3 секунды (было 1.5)
-      setTimeout(() => setShowTooltip(false), 3000);
-    }, 2000);
-
-    // Показываем подсказку каждые 20 секунд
-    const intervalTimer = setInterval(() => {
-      setShowTooltip(true);
-      setTimeout(() => setShowTooltip(false), 3000);
-    }, 20000);
+    // Проверяем нужно ли показать подсказку сразу
+    checkAndShowTooltip();
+    
+    // Проверяем каждую секунду нужно ли показать подсказку
+    const checkInterval = setInterval(() => {
+      checkAndShowTooltip();
+    }, 1000);
 
     return () => {
-      clearTimeout(tooltipTimer);
-      clearInterval(intervalTimer);
+      clearInterval(checkInterval);
     };
   }, []);
 
@@ -39,19 +34,26 @@ const ContactButton = ({ productName, productPrice }) => {
     }
   };
 
+  const checkAndShowTooltip = () => {
+    if (shouldShowTooltip()) {
+      setShowTooltip(true);
+      markTooltipShown();
+      
+      // Скрываем через 3 секунды
+      setTimeout(() => {
+        setShowTooltip(false);
+      }, 3000);
+    }
+  };
+
   const handleClick = () => {
     vibrate('medium');
     setShowTooltip(false);
     
-    let message = 'Здравствуйте!\n';
-    
-    if (productName && productPrice) {
-      message += `Интересует товар: ${productName}\nЦена: ${productPrice.toLocaleString('ru-RU')} ₽`;
-    } else {
-      message += 'Хочу оформить заказ';
-    }
-    
+    // Сообщение для общей кнопки - подталкивает прикрепить фото
+    const message = 'Здравствуйте, хотел бы заказать товар на фото. Сколько он будет стоить?';
     const encodedMessage = encodeURIComponent(message);
+    
     openTelegramLink(`https://t.me/${managerUsername}?text=${encodedMessage}`);
   };
 
@@ -61,7 +63,7 @@ const ContactButton = ({ productName, productPrice }) => {
 
   return (
     <div className="fixed bottom-20 right-4 z-40">
-      {/* Подсказка - 3 секунды */}
+      {/* Подсказка - глобальная, показывается раз в 20 секунд */}
       {showTooltip && (
         <div className="absolute bottom-full right-0 mb-2 animate-fade-in pointer-events-none">
           <div className="bg-gray-900 text-white text-xs px-3 py-1.5 rounded-lg shadow-xl whitespace-nowrap">
@@ -77,7 +79,6 @@ const ContactButton = ({ productName, productPrice }) => {
         className="w-14 h-14 bg-accent hover:bg-accent-hover rounded-full shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95"
         aria-label="Привезем любой товар"
       >
-        {/* Иконка грузовика/доставки */}
         <svg 
           className="w-7 h-7 text-white" 
           fill="none" 
@@ -92,7 +93,6 @@ const ContactButton = ({ productName, productPrice }) => {
           />
         </svg>
         
-        {/* Пульсирующий эффект */}
         <span className="absolute inset-0 rounded-full bg-accent animate-ping opacity-20"></span>
       </button>
     </div>
