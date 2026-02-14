@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { vibrate, openTelegramLink } from '../utils/telegram';
 import { getConfig } from '../utils/api';
 
@@ -12,15 +12,15 @@ const ContactButton = ({ productName, productPrice }) => {
     // Показываем подсказку через 2 секунды после загрузки
     const tooltipTimer = setTimeout(() => {
       setShowTooltip(true);
-      // Скрываем через 1.5 секунды
-      setTimeout(() => setShowTooltip(false), 1500);
+      // Скрываем через 3 секунды (было 1.5)
+      setTimeout(() => setShowTooltip(false), 3000);
     }, 2000);
 
-    // Показываем подсказку каждые 15 секунд
+    // Показываем подсказку каждые 20 секунд
     const intervalTimer = setInterval(() => {
       setShowTooltip(true);
-      setTimeout(() => setShowTooltip(false), 1500);
-    }, 15000);
+      setTimeout(() => setShowTooltip(false), 3000);
+    }, 20000);
 
     return () => {
       clearTimeout(tooltipTimer);
@@ -46,7 +46,7 @@ const ContactButton = ({ productName, productPrice }) => {
     let message = 'Здравствуйте!\n';
     
     if (productName && productPrice) {
-      message += `Интересует товар: ${productName}\nЦена: ${productPrice} ₽`;
+      message += `Интересует товар: ${productName}\nЦена: ${productPrice.toLocaleString('ru-RU')} ₽`;
     } else {
       message += 'Хочу оформить заказ';
     }
@@ -61,7 +61,7 @@ const ContactButton = ({ productName, productPrice }) => {
 
   return (
     <div className="fixed bottom-20 right-4 z-40">
-      {/* Подсказка - компактная и быстрая */}
+      {/* Подсказка - 3 секунды */}
       {showTooltip && (
         <div className="absolute bottom-full right-0 mb-2 animate-fade-in pointer-events-none">
           <div className="bg-gray-900 text-white text-xs px-3 py-1.5 rounded-lg shadow-xl whitespace-nowrap">

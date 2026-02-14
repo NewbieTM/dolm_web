@@ -1,5 +1,7 @@
 const TelegramBot = require('node-telegram-bot-api');
 const { uploadTelegramPhoto } = require('./cloudinary');
+const fs = require('fs').promises;
+const path = require('path');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID = parseInt(process.env.ADMIN_ID);
@@ -20,6 +22,33 @@ console.log('👤 Admin ID:', ADMIN_ID);
 console.log('📦 БД в боте:', USE_MONGODB ? 'MongoDB ✅' : 'JSON 📁');
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+
+// Путь к файлу с админами
+const ADMINS_FILE = path.join(__dirname, 'data', 'admins.json');
+
+// Загрузка списка админов
+async function loadAdmins() {
+  try {
+    const data = await fs.readFile(ADMINS_FILE, 'utf8');
+    return JSON.parse(data);
+  } catch (error) {
+    // Если файл не существует, создаём с главным админом
+    const admins = [ADMIN_ID];
+    await saveAdmins(admins);
+    return admins;
+  }
+}
+
+// Сохранение списка админов
+async function saveAdmins(admins) {
+  await fs.writeFile(ADMINS_FILE, JSON.stringify(admins, null, 2));
+}
+
+// Проверка является ли пользователь админом
+async function isAdmin(userId) {
+  const admins = await loadAdmins();
+  return admins.includes(userId);
+}
 
 // Хранилище для временных данных
 const tempProductData = {};
@@ -44,10 +73,13 @@ bot.onText(/\/admin/, async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
   
-  if (userId !== ADMIN_ID) {
+  if (!(await isAdmin(userId))) {
     await bot.sendMessage(chatId, '❌ Нет доступа');
     return;
   }
+  
+  const admins = await loadAdmins();
+  const isMainAdmin = userId === ADMIN_ID;
   
   await bot.sendMessage(chatId, `
 🔧 Админ-панель
@@ -58,16 +90,156 @@ bot.onText(/\/admin/, async (msg) => {
 /list_products - Список товаров
 /delete_product [ID] - Удалить товар
 /stats - Статистика
+${isMainAdmin ? '\n👥 Управление админами:\n/list_admins - Список админов\n/add_admin [ID] - Добавить админа\n/remove_admin [ID] - Удалить админа' : ''}
 
 📦 БД: ${USE_MONGODB ? 'MongoDB ✅' : 'JSON 📁'}
+👥 Админов: ${admins.length}
   `);
 });
+
+// ========== УПРАВЛЕНИЕ АДМИНАМИ ==========
+
+bot.onText(/\/list_admins/, async (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  
+  // Только главный админ может видеть список
+  if (userId !== ADMIN_ID) {
+    await bot.sendMessage(chatId, '❌ Только главный админ может просматривать список админов');
+    return;
+  }
+  
+  try {
+    const admins = await loadAdmins();
+    
+    let message = `👥 Список админов (${admins.length}):\n\n`;
+    
+    for (const adminId of admins) {
+      try {
+        const chat = await bot.getChat(adminId);
+        const name = chat.first_name || chat.username || `ID: ${adminId}`;
+        const isMain = adminId === ADMIN_ID ? ' 👑 (главный)' : '';
+        message += `• ${name}${isMain}\n  ID: ${adminId}\n\n`;
+      } catch (error) {
+        message += `• ID: ${adminId}\n\n`;
+      }
+    }
+    
+    await bot.sendMessage(chatId, message);
+  } catch (error) {
+    console.error('❌ Ошибка:', error);
+    await bot.sendMessage(chatId, `❌ Ошибка: ${error.message}`);
+  }
+});
+
+bot.onText(/\/add_admin (.+)/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  const newAdminId = parseInt(match[1]);
+  
+  // Только главный админ может добавлять админов
+  if (userId !== ADMIN_ID) {
+    await bot.sendMessage(chatId, '❌ Только главный админ может добавлять админов');
+    return;
+  }
+  
+  if (isNaN(newAdminId)) {
+    await bot.sendMessage(chatId, '❌ Неправильный ID. Используйте: /add_admin [ID]');
+    return;
+  }
+  
+  try {
+    const admins = await loadAdmins();
+    
+    if (admins.includes(newAdminId)) {
+      await bot.sendMessage(chatId, '⚠️ Этот пользователь уже является админом');
+      return;
+    }
+    
+    // Проверяем существует ли пользователь
+    try {
+      const chat = await bot.getChat(newAdminId);
+      const name = chat.first_name || chat.username || `ID: ${newAdminId}`;
+      
+      admins.push(newAdminId);
+      await saveAdmins(admins);
+      
+      await bot.sendMessage(chatId, `✅ Пользователь ${name} (${newAdminId}) добавлен в админы!`);
+      
+      // Уведомляем нового админа
+      try {
+        await bot.sendMessage(newAdminId, `
+🎉 Вам предоставлены права администратора!
+
+Используйте /admin для просмотра доступных команд.
+        `);
+      } catch (error) {
+        // Не удалось отправить сообщение новому админу (возможно бот заблокирован)
+      }
+      
+    } catch (error) {
+      await bot.sendMessage(chatId, `❌ Пользователь с ID ${newAdminId} не найден. Убедитесь что пользователь хотя бы раз писал боту.`);
+    }
+  } catch (error) {
+    console.error('❌ Ошибка:', error);
+    await bot.sendMessage(chatId, `❌ Ошибка: ${error.message}`);
+  }
+});
+
+bot.onText(/\/remove_admin (.+)/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  const adminIdToRemove = parseInt(match[1]);
+  
+  // Только главный админ может удалять админов
+  if (userId !== ADMIN_ID) {
+    await bot.sendMessage(chatId, '❌ Только главный админ может удалять админов');
+    return;
+  }
+  
+  if (isNaN(adminIdToRemove)) {
+    await bot.sendMessage(chatId, '❌ Неправильный ID. Используйте: /remove_admin [ID]');
+    return;
+  }
+  
+  // Нельзя удалить главного админа
+  if (adminIdToRemove === ADMIN_ID) {
+    await bot.sendMessage(chatId, '❌ Нельзя удалить главного админа');
+    return;
+  }
+  
+  try {
+    const admins = await loadAdmins();
+    
+    if (!admins.includes(adminIdToRemove)) {
+      await bot.sendMessage(chatId, '⚠️ Этот пользователь не является админом');
+      return;
+    }
+    
+    const updatedAdmins = admins.filter(id => id !== adminIdToRemove);
+    await saveAdmins(updatedAdmins);
+    
+    await bot.sendMessage(chatId, `✅ Админ ${adminIdToRemove} удалён`);
+    
+    // Уведомляем бывшего админа
+    try {
+      await bot.sendMessage(adminIdToRemove, '⚠️ Ваши права администратора были отозваны');
+    } catch (error) {
+      // Не удалось отправить сообщение
+    }
+  } catch (error) {
+    console.error('❌ Ошибка:', error);
+    await bot.sendMessage(chatId, `❌ Ошибка: ${error.message}`);
+  }
+});
+
+// ========== ОСТАЛЬНЫЕ КОМАНДЫ (ПРОВЕРКА АДМИНА) ==========
 
 bot.onText(/\/add_product/, async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
   
-  if (userId !== ADMIN_ID) return;
+  if (!(await isAdmin(userId))) return;
   
   tempProductData[chatId] = { step: 'name' };
   await bot.sendMessage(chatId, '📝 Введите название товара:');
@@ -78,7 +250,7 @@ bot.onText(/\/edit_product (.+)/, async (msg, match) => {
   const userId = msg.from.id;
   const productId = match[1];
   
-  if (userId !== ADMIN_ID) return;
+  if (!(await isAdmin(userId))) return;
   
   try {
     console.log('📝 Запрос редактирования товара:', productId);
@@ -132,7 +304,7 @@ bot.onText(/\/list_products/, async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
   
-  if (userId !== ADMIN_ID) return;
+  if (!(await isAdmin(userId))) return;
   
   try {
     console.log('📋 Запрос списка товаров из БД:', USE_MONGODB ? 'MongoDB' : 'JSON');
@@ -166,7 +338,7 @@ bot.onText(/\/delete_product (.+)/, async (msg, match) => {
   const userId = msg.from.id;
   const productId = match[1];
   
-  if (userId !== ADMIN_ID) return;
+  if (!(await isAdmin(userId))) return;
   
   try {
     console.log('🗑️  Удаление товара:', productId);
@@ -188,12 +360,13 @@ bot.onText(/\/stats/, async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
   
-  if (userId !== ADMIN_ID) return;
+  if (!(await isAdmin(userId))) return;
   
   try {
     const stats = await db.getStats();
     const products = await db.getAllProducts();
     const users = await db.getAllUsers();
+    const admins = await loadAdmins();
     
     await bot.sendMessage(chatId, `
 📊 Статистика
@@ -201,6 +374,7 @@ bot.onText(/\/stats/, async (msg) => {
 👥 Пользователей: ${users.length}
 📦 Товаров: ${products.length}
 👀 Просмотров: ${stats.totalViews || 0}
+🔧 Админов: ${admins.length}
 
 📦 БД: ${USE_MONGODB ? 'MongoDB ✅' : 'JSON 📁'}
     `);
@@ -215,7 +389,7 @@ bot.onText(/\/done/, async (msg) => {
   const userId = msg.from.id;
   const data = tempProductData[chatId];
   
-  if (userId !== ADMIN_ID || !data) return;
+  if (!(await isAdmin(userId)) || !data) return;
   
   try {
     if (!data.name || !data.price || !data.description || !data.category || !data.photos || data.photos.length === 0) {
@@ -242,7 +416,6 @@ bot.onText(/\/done/, async (msg) => {
     
     if (product) {
       console.log('✅ Товар добавлен:', product.id);
-      console.log('✅ Товар сохранен! ID:', product.id);
       
       await bot.sendMessage(chatId, `
 ✅ Товар добавлен!
@@ -273,7 +446,7 @@ bot.onText(/\/done_photos/, async (msg) => {
   const userId = msg.from.id;
   const editData = tempEditData[chatId];
   
-  if (userId !== ADMIN_ID || !editData || editData.editing !== 'photos') return;
+  if (!(await isAdmin(userId)) || !editData || editData.editing !== 'photos') return;
   
   if (editData.newPhotos.length === 0) {
     await bot.sendMessage(chatId, '❌ Добавьте хотя бы одно фото');
@@ -295,7 +468,7 @@ bot.on('callback_query', async (query) => {
   const data = tempProductData[chatId];
   const editData = tempEditData[chatId];
   
-  if (userId !== ADMIN_ID) {
+  if (!(await isAdmin(userId))) {
     await bot.answerCallbackQuery(query.id, { text: '❌ Нет доступа' });
     return;
   }
@@ -416,7 +589,7 @@ bot.on('message', async (msg) => {
   const userId = msg.from.id;
   const text = msg.text;
   
-  if (userId !== ADMIN_ID) return;
+  if (!(await isAdmin(userId))) return;
   if (!text || text.startsWith('/')) return;
   
   // Добавление товара
@@ -495,7 +668,7 @@ bot.on('photo', async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
   
-  if (userId !== ADMIN_ID) return;
+  if (!(await isAdmin(userId))) return;
   
   const data = tempProductData[chatId];
   const editData = tempEditData[chatId];

@@ -1,23 +1,27 @@
 import { useState, useEffect, useRef } from 'react';
-import { getProduct, viewProduct, getFavorites, addToFavorites, removeFromFavorites } from '../utils/api';
-import { getUserId, vibrate, showBackButton, hideBackButton, isRunningInTelegram } from '../utils/telegram';
-import ContactButton from '../components/ContactButton';
+import { getProduct, viewProduct, getFavorites, addToFavorites, removeFromFavorites, getConfig } from '../utils/api';
+import { getUserId, vibrate, showBackButton, hideBackButton, isRunningInTelegram, openTelegramLink } from '../utils/telegram';
 
 const Product = ({ productId, navigate }) => {
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [managerUsername, setManagerUsername] = useState('');
   const userId = getUserId();
 
-  const touchStartX = useRef(0);
-  const touchEndX = useRef(0);
+  // Состояния для плавного свайпа
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [startX, setStartX] = useState(0);
+
+  const imageContainerRef = useRef(null);
 
   useEffect(() => {
     console.log('📱 Product mounted, ID:', productId);
     loadProduct();
+    loadConfig();
     
-    // Показываем кнопку назад только в Telegram
     if (isRunningInTelegram()) {
       showBackButton(() => {
         navigate.back();
@@ -51,6 +55,17 @@ const Product = ({ productId, navigate }) => {
     }
   };
 
+  const loadConfig = async () => {
+    try {
+      const response = await getConfig();
+      if (response.success) {
+        setManagerUsername(response.data.managerUsername);
+      }
+    } catch (error) {
+      console.error('❌ Error loading config:', error);
+    }
+  };
+
   const handleFavoriteClick = async () => {
     vibrate('light');
     
@@ -72,35 +87,71 @@ const Product = ({ productId, navigate }) => {
     vibrate('light');
   };
 
+  // Плавный свайп - начало
   const handleTouchStart = (e) => {
-    touchStartX.current = e.touches[0].clientX;
-  };
-
-  const handleTouchMove = (e) => {
-    touchEndX.current = e.touches[0].clientX;
-  };
-
-  const handleTouchEnd = () => {
-    const diff = touchStartX.current - touchEndX.current;
+    if (!product || product.photos.length <= 1) return;
     
-    if (Math.abs(diff) > 50) {
-      if (diff > 0) {
+    setIsDragging(true);
+    setStartX(e.touches[0].clientX);
+    setDragOffset(0);
+  };
+
+  // Плавный свайп - движение
+  const handleTouchMove = (e) => {
+    if (!isDragging || !product) return;
+    
+    const currentX = e.touches[0].clientX;
+    const diff = currentX - startX;
+    
+    // Ограничиваем движение чтобы не слишком далеко тянуть
+    const maxDrag = 100;
+    const limitedDiff = Math.max(-maxDrag, Math.min(maxDrag, diff));
+    
+    setDragOffset(limitedDiff);
+  };
+
+  // Плавный свайп - конец
+  const handleTouchEnd = () => {
+    if (!isDragging || !product) return;
+    
+    setIsDragging(false);
+    
+    const threshold = 50; // Минимальное расстояние для переключения
+    
+    if (Math.abs(dragOffset) > threshold) {
+      if (dragOffset < 0) {
+        // Свайп влево - следующее фото
         setCurrentImageIndex((prev) => 
-          prev === product.photos.length - 1 ? 0 : prev + 1
+          prev === product.photos.length - 1 ? prev : prev + 1
         );
         vibrate('light');
       } else {
+        // Свайп вправо - предыдущее фото
         setCurrentImageIndex((prev) => 
-          prev === 0 ? product.photos.length - 1 : prev - 1
+          prev === 0 ? prev : prev - 1
         );
         vibrate('light');
       }
     }
+    
+    // Сбрасываем offset
+    setDragOffset(0);
   };
 
   const handleBackClick = () => {
     vibrate('light');
     navigate.back();
+  };
+
+  const handleContactManager = () => {
+    if (!managerUsername || !product) return;
+    
+    vibrate('medium');
+    
+    const message = `Здравствуйте!\n\nИнтересует товар: ${product.name}\nЦена: ${product.price.toLocaleString('ru-RU')} ₽`;
+    const encodedMessage = encodeURIComponent(message);
+    
+    openTelegramLink(`https://t.me/${managerUsername}?text=${encodedMessage}`);
   };
 
   if (loading) {
@@ -119,9 +170,23 @@ const Product = ({ productId, navigate }) => {
     );
   }
 
+  // Вычисляем transform для плавного свайпа
+  const getImageTransform = (index) => {
+    const position = index - currentImageIndex;
+    const baseTranslate = position * 100;
+    
+    // Если тянем текущее фото
+    if (index === currentImageIndex && isDragging) {
+      const dragPercent = (dragOffset / (imageContainerRef.current?.offsetWidth || 1)) * 100;
+      return `translateX(${baseTranslate + dragPercent}%)`;
+    }
+    
+    return `translateX(${baseTranslate}%)`;
+  };
+
   return (
     <div className="min-h-screen bg-dark-bg pb-24">
-      {/* Кнопка назад для браузера - показываем только если НЕ в Telegram */}
+      {/* Кнопка назад для браузера */}
       {!isRunningInTelegram() && (
         <button
           onClick={handleBackClick}
@@ -134,25 +199,43 @@ const Product = ({ productId, navigate }) => {
       )}
 
       <div className="max-w-5xl mx-auto">
+        {/* Галерея с плавным свайпом */}
         <div className="relative">
           <div 
+            ref={imageContainerRef}
             className="relative w-full overflow-hidden bg-dark-card"
             style={{ 
               height: 'auto',
               maxHeight: '600px',
-              aspectRatio: '1/1'
+              aspectRatio: '1/1',
+              touchAction: 'pan-y' // Позволяем вертикальную прокрутку
             }}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
           >
-            <img
-              src={product.photos[currentImageIndex]}
-              alt={product.name}
-              className="w-full h-full object-cover md:object-contain md:bg-black"
-              style={{ userSelect: 'none' }}
-            />
+            {/* Все фото рендерятся одновременно для плавного свайпа */}
+            {product.photos.map((photo, index) => (
+              <div
+                key={index}
+                className="absolute inset-0 w-full h-full"
+                style={{
+                  transform: getImageTransform(index),
+                  transition: isDragging ? 'none' : 'transform 0.3s ease-out',
+                  pointerEvents: index === currentImageIndex ? 'auto' : 'none'
+                }}
+              >
+                <img
+                  src={photo}
+                  alt={`${product.name} - фото ${index + 1}`}
+                  className="w-full h-full object-cover md:object-contain md:bg-black"
+                  style={{ userSelect: 'none' }}
+                  draggable={false}
+                />
+              </div>
+            ))}
             
+            {/* Кнопка избранного */}
             <button
               onClick={handleFavoriteClick}
               className="absolute top-4 right-4 w-12 h-12 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center transition-colors duration-200 hover:bg-black/70 z-10"
@@ -170,6 +253,7 @@ const Product = ({ productId, navigate }) => {
               </svg>
             </button>
 
+            {/* Индикаторы фото */}
             {product.photos.length > 1 && (
               <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-2 px-4 z-10">
                 {product.photos.map((_, index) => (
@@ -187,6 +271,7 @@ const Product = ({ productId, navigate }) => {
             )}
           </div>
 
+          {/* Миниатюры для desktop */}
           {product.photos.length > 1 && (
             <div className="hidden md:block px-4 pt-4">
               <div className="flex gap-2 overflow-x-auto pb-2">
@@ -212,6 +297,7 @@ const Product = ({ productId, navigate }) => {
           )}
         </div>
 
+        {/* Информация о товаре */}
         <div className="p-6 md:p-8">
           <div className="mb-3">
             <span className="inline-block px-3 py-1 bg-dark-card rounded-full text-sm text-gray-400">
@@ -245,13 +331,21 @@ const Product = ({ productId, navigate }) => {
               {product.description}
             </p>
           </div>
+
+          {/* Кнопка связаться с менеджером */}
+          {managerUsername && (
+            <button
+              onClick={handleContactManager}
+              className="w-full bg-accent text-white font-semibold py-4 rounded-xl hover:bg-accent/90 transition-all duration-200 flex items-center justify-center gap-3 shadow-lg shadow-accent/20"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+              Связаться с менеджером
+            </button>
+          )}
         </div>
       </div>
-
-      <ContactButton 
-        productName={product.name}
-        productPrice={product.price}
-      />
     </div>
   );
 };
