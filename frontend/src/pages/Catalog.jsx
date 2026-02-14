@@ -7,7 +7,7 @@ import ContactButton from '../components/ContactButton';
 import { getProducts, getCategories, addToFavorites, removeFromFavorites, getFavorites } from '../utils/api';
 import { getUserId } from '../utils/telegram';
 
-const Catalog = () => {
+const Catalog = ({ navigate }) => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [activeCategory, setActiveCategory] = useState(null);
@@ -35,29 +35,9 @@ const Catalog = () => {
       setLoading(true);
       setError(null);
       
-      // Загружаем категории
-      console.log('📂 Fetching categories...');
-      const categoriesRes = await getCategories().catch(err => {
-        console.error('Categories error:', err);
-        return { success: false, data: [] };
-      });
-      console.log('✅ Categories:', categoriesRes);
-      
-      // Загружаем избранное
-      console.log('⭐ Fetching favorites...');
-      const favoritesRes = await getFavorites(userId).catch(err => {
-        console.error('Favorites error:', err);
-        return { success: false, data: [] };
-      });
-      console.log('✅ Favorites:', favoritesRes);
-      
-      // Загружаем товары
-      console.log('📦 Fetching products...');
-      const productsRes = await getProducts({ sort: 'new' }).catch(err => {
-        console.error('Products error:', err);
-        return { success: false, data: [] };
-      });
-      console.log('✅ Products:', productsRes);
+      const categoriesRes = await getCategories().catch(() => ({ success: false, data: [] }));
+      const favoritesRes = await getFavorites(userId).catch(() => ({ success: false, data: [] }));
+      const productsRes = await getProducts({ sort: 'new' }).catch(() => ({ success: false, data: [] }));
 
       if (categoriesRes.success) {
         setCategories(categoriesRes.data);
@@ -75,11 +55,10 @@ const Catalog = () => {
         setError('Не удалось загрузить товары');
       }
     } catch (error) {
-      console.error('❌ Fatal error loading data:', error);
-      setError('Ошибка загрузки данных: ' + error.message);
+      console.error('❌ Fatal error:', error);
+      setError('Ошибка загрузки данных');
     } finally {
       setLoading(false);
-      console.log('✅ Initial data load complete');
     }
   };
 
@@ -91,12 +70,10 @@ const Catalog = () => {
         ...(searchQuery && { search: searchQuery })
       };
 
-      console.log('🔄 Loading products with filters:', params);
       const response = await getProducts(params);
 
       if (response.success) {
         setProducts(response.data);
-        console.log('✅ Products updated:', response.data.length);
       }
     } catch (error) {
       console.error('❌ Error loading products:', error);
@@ -104,12 +81,10 @@ const Catalog = () => {
   };
 
   const handleCategoryChange = (category) => {
-    console.log('📂 Category changed:', category);
     setActiveCategory(category);
   };
 
   const handleSearch = (query) => {
-    console.log('🔍 Search query:', query);
     setSearchQuery(query);
   };
 
@@ -129,7 +104,6 @@ const Catalog = () => {
     }
   };
 
-  // Показываем ошибку
   if (error) {
     return (
       <div className="min-h-screen bg-dark-bg flex items-center justify-center p-6">
@@ -152,7 +126,6 @@ const Catalog = () => {
 
   return (
     <div className="min-h-screen bg-dark-bg pb-20">
-      {/* Заголовок */}
       <header className="sticky top-0 z-20 bg-dark-bg/95 backdrop-blur-lg border-b border-gray-800">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <h1 className="text-2xl font-bold text-white mb-4">Каталог</h1>
@@ -160,9 +133,7 @@ const Catalog = () => {
         </div>
       </header>
 
-      {/* Контент */}
       <div className="max-w-7xl mx-auto">
-        {/* Фильтр категорий */}
         <div className="px-4 pt-4">
           <CategoryFilter
             categories={categories}
@@ -171,10 +142,8 @@ const Catalog = () => {
           />
         </div>
 
-        {/* Товары */}
         <div className="px-4 pt-4">
           {loading ? (
-            // Скелетоны загрузки
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               {[...Array(8)].map((_, i) => (
                 <div key={i} className="bg-dark-card rounded-2xl overflow-hidden">
@@ -187,14 +156,12 @@ const Catalog = () => {
               ))}
             </div>
           ) : products.length === 0 ? (
-            // Пустое состояние
             <div className="text-center py-12">
               <div className="text-6xl mb-4">📦</div>
               <h3 className="text-xl font-semibold text-white mb-2">Товаров нет</h3>
               <p className="text-gray-400">Скоро здесь появятся товары</p>
             </div>
           ) : (
-            // Список товаров
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               {products.map((product) => (
                 <ProductCard
@@ -202,6 +169,7 @@ const Catalog = () => {
                   product={product}
                   isFavorite={favorites.includes(product.id)}
                   onToggleFavorite={handleToggleFavorite}
+                  onNavigate={navigate}
                 />
               ))}
             </div>
@@ -209,10 +177,7 @@ const Catalog = () => {
         </div>
       </div>
 
-      {/* Нижняя навигация */}
-      <BottomNav />
-
-      {/* Кнопка контакта */}
+      <BottomNav currentPage="catalog" onNavigate={navigate} />
       <ContactButton />
     </div>
   );

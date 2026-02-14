@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { HashRouter, Routes, Route } from 'react-router-dom';
 import Catalog from './pages/Catalog';
 import Product from './pages/Product';
 import Favorites from './pages/Favorites';
@@ -7,45 +6,64 @@ import { initTelegramApp, isRunningInTelegram } from './utils/telegram';
 
 function App() {
   const [isReady, setIsReady] = useState(false);
+  const [currentPage, setCurrentPage] = useState('catalog'); // catalog, product, favorites
+  const [currentProductId, setCurrentProductId] = useState(null);
 
   useEffect(() => {
     console.log('🚀 =================================');
     console.log('📱 Telegram Mini App запускается...');
     console.log('🚀 =================================');
     console.log('🌐 URL:', window.location.href);
-    console.log('🔗 API URL:', import.meta.env.VITE_API_URL || '❌ НЕ УСТАНОВЛЕН');
-    console.log('🖥️  User Agent:', navigator.userAgent);
+    console.log('🔗 API URL:', import.meta.env.VITE_API_URL);
     
     try {
-      // Инициализируем Telegram SDK
       console.log('🔧 Инициализация Telegram SDK...');
       const tg = initTelegramApp();
       
       if (tg) {
         console.log('📱 Telegram SDK: ✅ Загружен');
-        console.log('✅ Telegram SDK инициализирован успешно');
       } else {
-        console.log('📱 Telegram SDK: ⚠️  Недоступен (браузер)');
+        console.log('📱 Telegram SDK: ⚠️  Недоступен');
       }
       
-      // Проверяем окружение
       const inTelegram = isRunningInTelegram();
-      console.log('📱 Running in Telegram:', inTelegram);
-      console.log('📱 Запущено в Telegram:', inTelegram ? 'ДА' : 'НЕТ');
+      console.log('📱 В Telegram:', inTelegram ? 'ДА' : 'НЕТ');
       
       console.log('✅ App готов к работе!');
       setIsReady(true);
-      
     } catch (err) {
       console.error('❌ Ошибка инициализации:', err);
-      // Даже при ошибке показываем приложение
       setIsReady(true);
     }
     
     console.log('🚀 =================================');
   }, []);
 
-  // Показываем loader пока не готово
+  // Функции навигации
+  const navigate = {
+    toCatalog: () => {
+      console.log('📍 Навигация: Каталог');
+      setCurrentPage('catalog');
+      setCurrentProductId(null);
+    },
+    toProduct: (productId) => {
+      console.log('📍 Навигация: Товар', productId);
+      setCurrentPage('product');
+      setCurrentProductId(productId);
+    },
+    toFavorites: () => {
+      console.log('📍 Навигация: Избранное');
+      setCurrentPage('favorites');
+      setCurrentProductId(null);
+    },
+    back: () => {
+      console.log('📍 Навигация: Назад');
+      setCurrentPage('catalog');
+      setCurrentProductId(null);
+    }
+  };
+
+  // Loader
   if (!isReady) {
     return (
       <div className="min-h-screen bg-dark-bg flex items-center justify-center">
@@ -57,14 +75,23 @@ function App() {
     );
   }
 
+  // Рендер текущей страницы
+  console.log('🔄 Рендер App - Страница:', currentPage, 'Product ID:', currentProductId);
+
   return (
-    <HashRouter>
-      <Routes>
-        <Route path="/" element={<Catalog />} />
-        <Route path="/product/:id" element={<Product />} />
-        <Route path="/favorites" element={<Favorites />} />
-      </Routes>
-    </HashRouter>
+    <div className="app-container">
+      {currentPage === 'catalog' && (
+        <Catalog navigate={navigate} />
+      )}
+      
+      {currentPage === 'product' && currentProductId && (
+        <Product productId={currentProductId} navigate={navigate} />
+      )}
+      
+      {currentPage === 'favorites' && (
+        <Favorites navigate={navigate} />
+      )}
+    </div>
   );
 }
 

@@ -1,12 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
 import { getProduct, viewProduct, getFavorites, addToFavorites, removeFromFavorites } from '../utils/api';
 import { getUserId, vibrate, showBackButton, hideBackButton } from '../utils/telegram';
 import ContactButton from '../components/ContactButton';
 
-const Product = () => {
-  const { id } = useParams();
-  const navigate = useNavigate();
+const Product = ({ productId, navigate }) => {
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
@@ -17,37 +14,35 @@ const Product = () => {
   const touchEndX = useRef(0);
 
   useEffect(() => {
+    console.log('📱 Product mounted, ID:', productId);
     loadProduct();
     
     showBackButton(() => {
-      navigate(-1);
+      navigate.back();
     });
 
     return () => {
       hideBackButton();
     };
-  }, [id]);
+  }, [productId]);
 
   const loadProduct = async () => {
     setLoading(true);
     try {
-      console.log('Loading product:', id);
-      const productResponse = await getProduct(id);
-      console.log('Product response:', productResponse);
+      const productResponse = await getProduct(productId);
       
       if (productResponse.success) {
         setProduct(productResponse.data);
-        await viewProduct(id);
+        await viewProduct(productId);
         
         const favoritesResponse = await getFavorites(userId);
-        console.log('Favorites response:', favoritesResponse);
         
         if (favoritesResponse.success) {
-          setIsFavorite(favoritesResponse.data.some(p => p.id === id));
+          setIsFavorite(favoritesResponse.data.some(p => p.id === productId));
         }
       }
     } catch (error) {
-      console.error('Ошибка загрузки товара:', error);
+      console.error('❌ Error loading product:', error);
     } finally {
       setLoading(false);
     }
@@ -58,30 +53,20 @@ const Product = () => {
     
     try {
       if (isFavorite) {
-        console.log('Removing from favorites...');
-        const response = await removeFromFavorites(userId, id);
-        console.log('Remove response:', response);
-        
-        if (response.success) {
-          setIsFavorite(false);
-        }
+        await removeFromFavorites(userId, productId);
+        setIsFavorite(false);
       } else {
-        console.log('Adding to favorites...');
-        const response = await addToFavorites(userId, id);
-        console.log('Add response:', response);
-        
-        if (response.success) {
-          setIsFavorite(true);
-        }
+        await addToFavorites(userId, productId);
+        setIsFavorite(true);
       }
     } catch (error) {
-      console.error('Ошибка с избранным:', error);
+      console.error('❌ Favorite error:', error);
     }
   };
 
   const handleImageClick = (index) => {
-    vibrate('light');
     setCurrentImageIndex(index);
+    vibrate('light');
   };
 
   const handleTouchStart = (e) => {
@@ -93,30 +78,27 @@ const Product = () => {
   };
 
   const handleTouchEnd = () => {
-    if (!product || product.photos.length <= 1) return;
-
-    const swipeDistance = touchStartX.current - touchEndX.current;
-    const minSwipeDistance = 50;
-
-    if (Math.abs(swipeDistance) < minSwipeDistance) return;
-
-    if (swipeDistance > 0) {
-      setCurrentImageIndex((prev) => 
-        prev === product.photos.length - 1 ? 0 : prev + 1
-      );
-      vibrate('light');
-    } else {
-      setCurrentImageIndex((prev) => 
-        prev === 0 ? product.photos.length - 1 : prev - 1
-      );
-      vibrate('light');
+    const diff = touchStartX.current - touchEndX.current;
+    
+    if (Math.abs(diff) > 50) {
+      if (diff > 0) {
+        setCurrentImageIndex((prev) => 
+          prev === product.photos.length - 1 ? 0 : prev + 1
+        );
+        vibrate('light');
+      } else {
+        setCurrentImageIndex((prev) => 
+          prev === 0 ? product.photos.length - 1 : prev - 1
+        );
+        vibrate('light');
+      }
     }
   };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-dark-bg flex items-center justify-center">
-        <div className="text-accent text-xl">Загрузка...</div>
+        <div className="w-16 h-16 border-4 border-accent border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
@@ -131,18 +113,14 @@ const Product = () => {
 
   return (
     <div className="min-h-screen bg-dark-bg pb-24">
-      {/* Ограничиваем ширину на больших экранах */}
       <div className="max-w-5xl mx-auto">
-        
-        {/* Галерея фото - АДАПТИВНАЯ */}
         <div className="relative">
-          {/* Главное фото с ограничением высоты */}
           <div 
             className="relative w-full overflow-hidden bg-dark-card"
             style={{ 
               height: 'auto',
-              maxHeight: '600px', // Ограничение высоты на ПК
-              aspectRatio: '1/1' // На мобильных квадрат
+              maxHeight: '600px',
+              aspectRatio: '1/1'
             }}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
@@ -155,7 +133,6 @@ const Product = () => {
               style={{ userSelect: 'none' }}
             />
             
-            {/* Кнопка избранного */}
             <button
               onClick={handleFavoriteClick}
               className="absolute top-4 right-4 w-12 h-12 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center transition-colors duration-200 hover:bg-black/70 z-10"
@@ -173,7 +150,6 @@ const Product = () => {
               </svg>
             </button>
 
-            {/* Индикаторы фото */}
             {product.photos.length > 1 && (
               <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-2 px-4 z-10">
                 {product.photos.map((_, index) => (
@@ -191,7 +167,6 @@ const Product = () => {
             )}
           </div>
 
-          {/* Миниатюры - только на desktop */}
           {product.photos.length > 1 && (
             <div className="hidden md:block px-4 pt-4">
               <div className="flex gap-2 overflow-x-auto pb-2">
@@ -217,21 +192,17 @@ const Product = () => {
           )}
         </div>
 
-        {/* Информация о товаре */}
         <div className="p-6 md:p-8">
-          {/* Категория */}
           <div className="mb-3">
             <span className="inline-block px-3 py-1 bg-dark-card rounded-full text-sm text-gray-400">
               {product.category}
             </span>
           </div>
 
-          {/* Название */}
           <h1 className="text-2xl md:text-3xl font-bold text-white mb-4">
             {product.name}
           </h1>
 
-          {/* Цена и просмотры */}
           <div className="flex items-center justify-between mb-6">
             <div className="text-3xl md:text-4xl font-bold text-accent">
               {product.price.toLocaleString('ru-RU')} ₽
@@ -248,7 +219,6 @@ const Product = () => {
             )}
           </div>
 
-          {/* Описание */}
           <div className="mb-6">
             <h2 className="text-lg md:text-xl font-semibold text-white mb-3">Описание</h2>
             <p className="text-gray-300 leading-relaxed whitespace-pre-line">
@@ -258,7 +228,6 @@ const Product = () => {
         </div>
       </div>
 
-      {/* Кнопка связи с менеджером */}
       <ContactButton 
         productName={product.name}
         productPrice={product.price}

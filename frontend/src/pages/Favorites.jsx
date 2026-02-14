@@ -1,65 +1,53 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import ProductCard from '../components/ProductCard';
 import BottomNav from '../components/BottomNav';
 import ContactButton from '../components/ContactButton';
 import { getFavorites, removeFromFavorites } from '../utils/api';
 import { getUserId } from '../utils/telegram';
 
-const Favorites = () => {
+const Favorites = ({ navigate }) => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const userId = getUserId();
 
   useEffect(() => {
-    console.log('Favorites page mounted, userId:', userId);
+    console.log('📱 Favorites mounted, userId:', userId);
     loadFavorites();
   }, []);
 
   const loadFavorites = async () => {
     setLoading(true);
     try {
-      console.log('Loading favorites...');
       const response = await getFavorites(userId);
-      console.log('Favorites response:', response);
       
       if (response.success) {
         setProducts(response.data);
       }
     } catch (error) {
-      console.error('Ошибка загрузки избранного:', error);
+      console.error('❌ Error loading favorites:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const handleToggleFavorite = async (productId) => {
-    console.log('Removing from favorites:', productId);
-    
     try {
-      const response = await removeFromFavorites(userId, productId);
-      console.log('Remove response:', response);
-      
-      if (response.success) {
-        setProducts(products.filter(p => p.id !== productId));
-      }
+      await removeFromFavorites(userId, productId);
+      setProducts(products.filter(p => p.id !== productId));
     } catch (error) {
-      console.error('Ошибка удаления из избранного:', error);
+      console.error('❌ Error removing favorite:', error);
     }
   };
 
   return (
     <div className="min-h-screen bg-dark-bg pb-20">
-      {/* Заголовок */}
       <header className="sticky top-0 z-20 bg-dark-bg/95 backdrop-blur-lg border-b border-gray-800">
-        {/* Ограничиваем ширину на больших экранах */}
         <div className="max-w-7xl mx-auto px-4 py-4">
           <h1 className="text-2xl font-bold text-white">Избранное</h1>
         </div>
       </header>
 
-      {/* Контент с ограничением ширины */}
       <div className="max-w-7xl mx-auto">
-        {/* Товары - адаптивная сетка */}
         <div className="px-4 pt-4">
           {loading ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
@@ -88,7 +76,6 @@ const Favorites = () => {
               </p>
             </div>
           ) : (
-            /* Адаптивная сетка как в каталоге */
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               {products.map((product) => (
                 <ProductCard
@@ -96,6 +83,7 @@ const Favorites = () => {
                   product={product}
                   isFavorite={true}
                   onToggleFavorite={handleToggleFavorite}
+                  onNavigate={navigate}
                 />
               ))}
             </div>
@@ -103,11 +91,8 @@ const Favorites = () => {
         </div>
       </div>
 
-      {/* Кнопка связи с менеджером */}
+      <BottomNav currentPage="favorites" onNavigate={navigate} />
       <ContactButton />
-
-      {/* Нижнее меню */}
-      <BottomNav />
     </div>
   );
 };
