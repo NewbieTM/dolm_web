@@ -14,9 +14,9 @@ const Product = ({ productId, navigate }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
   const [startX, setStartX] = useState(0);
-  const [isPointerActive, setIsPointerActive] = useState(false); // НОВЫЙ флаг!
 
   const imageContainerRef = useRef(null);
+  const topSectionRef = useRef(null);
 
   useEffect(() => {
     console.log('📱 Product mounted, ID:', productId);
@@ -33,6 +33,20 @@ const Product = ({ productId, navigate }) => {
       hideBackButton();
     };
   }, [productId]);
+
+  useEffect(() => {
+    // Автопрокрутка вниз после загрузки для решения проблемы свайпа
+    if (!loading && product && topSectionRef.current) {
+      setTimeout(() => {
+        // Прокручиваем на высоту header (примерно 60-80px)
+        window.scrollTo({
+          top: 70,
+          behavior: 'instant' // Мгновенно, без анимации
+        });
+        console.log('📜 Автопрокрутка выполнена для защиты от сворачивания');
+      }, 50);
+    }
+  }, [loading, product]);
 
   const loadProduct = async () => {
     setLoading(true);
@@ -88,59 +102,39 @@ const Product = ({ productId, navigate }) => {
     vibrate('light');
   };
 
-  // ИСПРАВЛЕННЫЙ свайп через POINTER EVENTS
-  const handlePointerDown = (e) => {
+  // Простой свайп без сложной блокировки
+  const handleTouchStart = (e) => {
     if (!product || product.photos.length <= 1) return;
     
-    // Захватываем pointer - теперь все события придут к нам
-    e.currentTarget.setPointerCapture(e.pointerId);
-    
-    setIsPointerActive(true);
     setIsDragging(true);
-    setStartX(e.clientX);
+    setStartX(e.touches[0].clientX);
     setDragOffset(0);
-    
-    console.log('👇 Pointer down');
   };
 
-  const handlePointerMove = (e) => {
-    // ВСЕГДА блокируем если pointer активен
-    if (isPointerActive) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    
+  const handleTouchMove = (e) => {
     if (!isDragging || !product) return;
     
-    const currentX = e.clientX;
+    const currentX = e.touches[0].clientX;
     const diffX = currentX - startX;
     
-    // Ограничиваем движение
     const maxDrag = 100;
     const limitedDiff = Math.max(-maxDrag, Math.min(maxDrag, diffX));
     
     setDragOffset(limitedDiff);
   };
 
-  const handlePointerUp = (e) => {
-    if (!isDragging || !product) {
-      setIsPointerActive(false);
-      return;
-    }
-    
-    console.log('👆 Pointer up');
+  const handleTouchEnd = () => {
+    if (!isDragging || !product) return;
     
     const threshold = 50;
     
     if (Math.abs(dragOffset) > threshold) {
       if (dragOffset < 0) {
-        // Свайп влево - следующее фото
         setCurrentImageIndex((prev) => 
           prev === product.photos.length - 1 ? prev : prev + 1
         );
         vibrate('light');
       } else {
-        // Свайп вправо - предыдущее фото
         setCurrentImageIndex((prev) => 
           prev === 0 ? prev : prev - 1
         );
@@ -150,16 +144,6 @@ const Product = ({ productId, navigate }) => {
     
     setIsDragging(false);
     setDragOffset(0);
-    
-    // ВАЖНО: сбрасываем флаг только здесь!
-    setIsPointerActive(false);
-  };
-
-  const handlePointerCancel = (e) => {
-    console.log('❌ Pointer cancel');
-    setIsDragging(false);
-    setDragOffset(0);
-    setIsPointerActive(false);
   };
 
   const handleBackClick = () => {
@@ -194,7 +178,6 @@ const Product = ({ productId, navigate }) => {
     );
   }
 
-  // Вычисляем transform для плавного свайпа
   const getImageTransform = (index) => {
     const position = index - currentImageIndex;
     const baseTranslate = position * 100;
@@ -209,40 +192,54 @@ const Product = ({ productId, navigate }) => {
 
   return (
     <div className="min-h-screen bg-dark-bg pb-24">
-      {/* Кнопка назад для браузера */}
-      {!isRunningInTelegram() && (
-        <button
-          onClick={handleBackClick}
-          className="fixed top-4 left-4 z-50 w-10 h-10 bg-dark-card/95 backdrop-blur-sm rounded-full flex items-center justify-center transition-colors duration-200 hover:bg-dark-hover"
-        >
-          <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-      )}
+      {/* Header с кнопкой назад и breadcrumb - создаёт отступ сверху */}
+      <div 
+        ref={topSectionRef}
+        className="sticky top-0 z-50 bg-dark-bg/95 backdrop-blur-lg border-b border-gray-800"
+      >
+        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center gap-3">
+          {/* Кнопка назад */}
+          <button
+            onClick={handleBackClick}
+            className="w-10 h-10 bg-dark-card rounded-full flex items-center justify-center transition-colors duration-200 hover:bg-dark-hover"
+          >
+            <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+
+          {/* Breadcrumb */}
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-gray-400">Каталог</span>
+            <svg className="w-4 h-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            <span className="text-white">{product.category}</span>
+          </div>
+        </div>
+      </div>
 
       <div className="max-w-5xl mx-auto">
-        {/* Галерея с POINTER EVENTS */}
+        {/* Галерея с ПОЛНЫМ отображением фото */}
         <div className="relative">
           <div 
             ref={imageContainerRef}
             className="relative w-full overflow-hidden bg-dark-card select-none"
             style={{ 
-              height: 'auto',
+              minHeight: '300px',
               maxHeight: '600px',
-              aspectRatio: '1/1',
-              touchAction: 'none' // Блокируем стандартное поведение
+              touchAction: 'pan-y'
             }}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerCancel}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onTouchCancel={handleTouchEnd}
           >
-            {/* Все фото рендерятся одновременно для плавного свайпа */}
+            {/* Все фото рендерятся одновременно */}
             {product.photos.map((photo, index) => (
               <div
                 key={index}
-                className="absolute inset-0 w-full h-full"
+                className="absolute inset-0 w-full h-full flex items-center justify-center"
                 style={{
                   transform: getImageTransform(index),
                   transition: isDragging ? 'none' : 'transform 0.3s ease-out',
@@ -252,8 +249,12 @@ const Product = ({ productId, navigate }) => {
                 <img
                   src={photo}
                   alt={`${product.name} - фото ${index + 1}`}
-                  className="w-full h-full object-cover md:object-contain md:bg-black"
-                  style={{ userSelect: 'none', pointerEvents: 'none' }}
+                  className="w-full h-full"
+                  style={{ 
+                    objectFit: 'contain', // ПОЛНОЕ отображение фото!
+                    userSelect: 'none', 
+                    pointerEvents: 'none' 
+                  }}
                   draggable={false}
                 />
               </div>
