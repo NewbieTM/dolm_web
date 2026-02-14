@@ -6,7 +6,6 @@ function generateDevUserId() {
   let userId = localStorage.getItem('dev_user_id');
   
   if (!userId) {
-    // Создаём уникальный ID на основе времени и случайного числа
     userId = `dev_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     localStorage.setItem('dev_user_id', userId);
     console.log('🆔 Создан новый уникальный dev user ID:', userId);
@@ -21,22 +20,19 @@ function generateDevUserId() {
 export function initTelegramApp() {
   if (!tg) {
     console.warn('⚠️  Telegram WebApp SDK не найден');
-    console.log('Работаем в режиме разработки с уникальным пользователем');
+    console.log('Работаем в режиме разработки');
     return null;
   }
 
   try {
     console.log('🔧 Инициализация Telegram WebApp...');
     
-    // ВАЖНО: Готовим приложение
     tg.ready();
     
-    // Разворачиваем на весь экран
     if (tg.expand) {
       tg.expand();
     }
 
-    // Устанавливаем цвета
     if (tg.setHeaderColor) {
       tg.setHeaderColor('#0F0F0F');
     }
@@ -57,22 +53,19 @@ export function initTelegramApp() {
   }
 }
 
-// Получить стабильный ID пользователя
+// Получить ID пользователя
 export function getUserId() {
-  // В Telegram Mini App - используем реальный ID
   if (tg?.initDataUnsafe?.user?.id) {
     const id = tg.initDataUnsafe.user.id.toString();
     console.log('🆔 Telegram User ID:', id);
     return id;
   }
   
-  // Для обычного браузера (не Telegram) - генерируем УНИКАЛЬНЫЙ ID
   if (typeof window !== 'undefined' && window.localStorage) {
     const devId = generateDevUserId();
     return devId;
   }
   
-  // Fallback - генерируем временный ID
   console.warn('⚠️  Используется fallback ID');
   return `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
@@ -83,7 +76,6 @@ export function getUserData() {
     return tg.initDataUnsafe.user;
   }
   
-  // Для разработки
   const devId = getUserId();
   return {
     id: devId,
@@ -122,17 +114,26 @@ export function hideBackButton() {
   console.log('◀️  Back button скрыта');
 }
 
-// Вибрация
+// Вибрация - ИСПРАВЛЕНО!
 export function vibrate(style = 'light') {
   if (!tg || !tg.HapticFeedback) return;
   
-  const styles = {
-    light: 'impact',
-    medium: 'notification',
-    heavy: 'heavy'
-  };
-
-  tg.HapticFeedback.impactOccurred(styles[style] || 'light');
+  try {
+    // Используем правильные значения для impactOccurred
+    // Допустимые значения: 'light', 'medium', 'heavy', 'rigid', 'soft'
+    if (['light', 'medium', 'heavy', 'rigid', 'soft'].includes(style)) {
+      tg.HapticFeedback.impactOccurred(style);
+    } else if (style === 'success' || style === 'warning' || style === 'error') {
+      // Для notification используем notificationOccurred
+      tg.HapticFeedback.notificationOccurred(style);
+    } else {
+      // По умолчанию используем light
+      tg.HapticFeedback.impactOccurred('light');
+    }
+  } catch (error) {
+    // Игнорируем ошибки вибрации чтобы не ломать приложение
+    console.warn('⚠️  Vibrate error:', error.message);
+  }
 }
 
 // Открыть Telegram ссылку

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { getProduct, viewProduct, getFavorites, addToFavorites, removeFromFavorites } from '../utils/api';
-import { getUserId, vibrate, showBackButton, hideBackButton } from '../utils/telegram';
+import { getUserId, vibrate, showBackButton, hideBackButton, isRunningInTelegram } from '../utils/telegram';
 import ContactButton from '../components/ContactButton';
 
 const Product = ({ productId, navigate }) => {
@@ -17,9 +17,12 @@ const Product = ({ productId, navigate }) => {
     console.log('📱 Product mounted, ID:', productId);
     loadProduct();
     
-    showBackButton(() => {
-      navigate.back();
-    });
+    // Показываем кнопку назад только в Telegram
+    if (isRunningInTelegram()) {
+      showBackButton(() => {
+        navigate.back();
+      });
+    }
 
     return () => {
       hideBackButton();
@@ -95,6 +98,11 @@ const Product = ({ productId, navigate }) => {
     }
   };
 
+  const handleBackClick = () => {
+    vibrate('light');
+    navigate.back();
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-dark-bg flex items-center justify-center">
@@ -113,6 +121,18 @@ const Product = ({ productId, navigate }) => {
 
   return (
     <div className="min-h-screen bg-dark-bg pb-24">
+      {/* Кнопка назад для браузера - показываем только если НЕ в Telegram */}
+      {!isRunningInTelegram() && (
+        <button
+          onClick={handleBackClick}
+          className="fixed top-4 left-4 z-50 w-10 h-10 bg-dark-card/95 backdrop-blur-sm rounded-full flex items-center justify-center transition-colors duration-200 hover:bg-dark-hover"
+        >
+          <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+      )}
+
       <div className="max-w-5xl mx-auto">
         <div className="relative">
           <div 
