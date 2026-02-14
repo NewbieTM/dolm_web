@@ -14,9 +14,9 @@ const Product = ({ productId, navigate }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
   const [startX, setStartX] = useState(0);
+  const [isPointerActive, setIsPointerActive] = useState(false); // НОВЫЙ флаг!
 
   const imageContainerRef = useRef(null);
-  const topSpacerRef = useRef(null);
 
   useEffect(() => {
     console.log('📱 Product mounted, ID:', productId);
@@ -28,19 +28,6 @@ const Product = ({ productId, navigate }) => {
         navigate.back();
       });
     }
-
-    // ЭЛЕГАНТНОЕ РЕШЕНИЕ: прокручиваем страницу вниз при загрузке
-    // Это предотвращает сворачивание mini app при свайпе
-    setTimeout(() => {
-      if (topSpacerRef.current) {
-        const spacerHeight = topSpacerRef.current.offsetHeight;
-        window.scrollTo({
-          top: spacerHeight,
-          behavior: 'instant' // Мгновенно, без анимации
-        });
-        console.log('✅ Страница прокручена на', spacerHeight, 'px');
-      }
-    }, 50); // Небольшая задержка чтобы DOM успел отрендериться
 
     return () => {
       hideBackButton();
@@ -101,19 +88,31 @@ const Product = ({ productId, navigate }) => {
     vibrate('light');
   };
 
-  // Плавный свайп - обычная версия (без глобальной блокировки)
-  const handleTouchStart = (e) => {
+  // ИСПРАВЛЕННЫЙ свайп через POINTER EVENTS
+  const handlePointerDown = (e) => {
     if (!product || product.photos.length <= 1) return;
     
+    // Захватываем pointer - теперь все события придут к нам
+    e.currentTarget.setPointerCapture(e.pointerId);
+    
+    setIsPointerActive(true);
     setIsDragging(true);
-    setStartX(e.touches[0].clientX);
+    setStartX(e.clientX);
     setDragOffset(0);
+    
+    console.log('👇 Pointer down');
   };
 
-  const handleTouchMove = (e) => {
+  const handlePointerMove = (e) => {
+    // ВСЕГДА блокируем если pointer активен
+    if (isPointerActive) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
     if (!isDragging || !product) return;
     
-    const currentX = e.touches[0].clientX;
+    const currentX = e.clientX;
     const diffX = currentX - startX;
     
     // Ограничиваем движение
@@ -123,20 +122,25 @@ const Product = ({ productId, navigate }) => {
     setDragOffset(limitedDiff);
   };
 
-  const handleTouchEnd = () => {
-    if (!isDragging || !product) return;
+  const handlePointerUp = (e) => {
+    if (!isDragging || !product) {
+      setIsPointerActive(false);
+      return;
+    }
     
-    setIsDragging(false);
+    console.log('👆 Pointer up');
     
     const threshold = 50;
     
     if (Math.abs(dragOffset) > threshold) {
       if (dragOffset < 0) {
+        // Свайп влево - следующее фото
         setCurrentImageIndex((prev) => 
           prev === product.photos.length - 1 ? prev : prev + 1
         );
         vibrate('light');
       } else {
+        // Свайп вправо - предыдущее фото
         setCurrentImageIndex((prev) => 
           prev === 0 ? prev : prev - 1
         );
@@ -144,7 +148,18 @@ const Product = ({ productId, navigate }) => {
       }
     }
     
+    setIsDragging(false);
     setDragOffset(0);
+    
+    // ВАЖНО: сбрасываем флаг только здесь!
+    setIsPointerActive(false);
+  };
+
+  const handlePointerCancel = (e) => {
+    console.log('❌ Pointer cancel');
+    setIsDragging(false);
+    setDragOffset(0);
+    setIsPointerActive(false);
   };
 
   const handleBackClick = () => {
@@ -179,6 +194,7 @@ const Product = ({ productId, navigate }) => {
     );
   }
 
+  // Вычисляем transform для плавного свайпа
   const getImageTransform = (index) => {
     const position = index - currentImageIndex;
     const baseTranslate = position * 100;
@@ -205,26 +221,22 @@ const Product = ({ productId, navigate }) => {
         </button>
       )}
 
-      {/* ЭЛЕГАНТНОЕ РЕШЕНИЕ: Отступ сверху для прокрутки */}
-      <div 
-        ref={topSpacerRef}
-        className="h-10 bg-dark-bg"
-        style={{ minHeight: '40px' }}
-      />
-
       <div className="max-w-5xl mx-auto">
-        {/* Галерея - БЕЗ aspect-ratio, показываем полную фотку */}
+        {/* Галерея с POINTER EVENTS */}
         <div className="relative">
           <div 
             ref={imageContainerRef}
             className="relative w-full overflow-hidden bg-dark-card select-none"
             style={{ 
-              touchAction: 'pan-y' // Разрешаем вертикальную прокрутку
+              height: 'auto',
+              maxHeight: '600px',
+              aspectRatio: '1/1',
+              touchAction: 'none' // Блокируем стандартное поведение
             }}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-            onTouchCancel={handleTouchEnd}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
           >
             {/* Все фото рендерятся одновременно для плавного свайпа */}
             {product.photos.map((photo, index) => (
@@ -237,16 +249,11 @@ const Product = ({ productId, navigate }) => {
                   pointerEvents: index === currentImageIndex ? 'auto' : 'none'
                 }}
               >
-                {/* Показываем ПОЛНУЮ фотку без обрезки */}
                 <img
                   src={photo}
                   alt={`${product.name} - фото ${index + 1}`}
-                  className="w-full h-auto object-contain bg-dark-card"
-                  style={{ 
-                    userSelect: 'none', 
-                    pointerEvents: 'none',
-                    maxHeight: '600px' // Максимальная высота для больших фото
-                  }}
+                  className="w-full h-full object-cover md:object-contain md:bg-black"
+                  style={{ userSelect: 'none', pointerEvents: 'none' }}
                   draggable={false}
                 />
               </div>
