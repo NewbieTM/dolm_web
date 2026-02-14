@@ -14,6 +14,7 @@ const Product = ({ productId, navigate }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
   const [startX, setStartX] = useState(0);
+  const [isPointerActive, setIsPointerActive] = useState(false); // НОВЫЙ флаг!
 
   const imageContainerRef = useRef(null);
 
@@ -87,23 +88,31 @@ const Product = ({ productId, navigate }) => {
     vibrate('light');
   };
 
-  // ПОЛНАЯ БЛОКИРОВКА вертикального движения - начало
-  const handleTouchStart = (e) => {
+  // ИСПРАВЛЕННЫЙ свайп через POINTER EVENTS
+  const handlePointerDown = (e) => {
     if (!product || product.photos.length <= 1) return;
     
+    // Захватываем pointer - теперь все события придут к нам
+    e.currentTarget.setPointerCapture(e.pointerId);
+    
+    setIsPointerActive(true);
     setIsDragging(true);
-    setStartX(e.touches[0].clientX);
+    setStartX(e.clientX);
     setDragOffset(0);
+    
+    console.log('👇 Pointer down');
   };
 
-  // ПОЛНАЯ БЛОКИРОВКА вертикального движения - движение
-  const handleTouchMove = (e) => {
+  const handlePointerMove = (e) => {
+    // ВСЕГДА блокируем если pointer активен
+    if (isPointerActive) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
     if (!isDragging || !product) return;
     
-    // ВСЕГДА блокируем стандартное поведение
-    e.preventDefault();
-    
-    const currentX = e.touches[0].clientX;
+    const currentX = e.clientX;
     const diffX = currentX - startX;
     
     // Ограничиваем движение
@@ -113,11 +122,13 @@ const Product = ({ productId, navigate }) => {
     setDragOffset(limitedDiff);
   };
 
-  // Конец касания
-  const handleTouchEnd = () => {
-    if (!isDragging || !product) return;
+  const handlePointerUp = (e) => {
+    if (!isDragging || !product) {
+      setIsPointerActive(false);
+      return;
+    }
     
-    setIsDragging(false);
+    console.log('👆 Pointer up');
     
     const threshold = 50;
     
@@ -137,7 +148,18 @@ const Product = ({ productId, navigate }) => {
       }
     }
     
+    setIsDragging(false);
     setDragOffset(0);
+    
+    // ВАЖНО: сбрасываем флаг только здесь!
+    setIsPointerActive(false);
+  };
+
+  const handlePointerCancel = (e) => {
+    console.log('❌ Pointer cancel');
+    setIsDragging(false);
+    setDragOffset(0);
+    setIsPointerActive(false);
   };
 
   const handleBackClick = () => {
@@ -200,7 +222,7 @@ const Product = ({ productId, navigate }) => {
       )}
 
       <div className="max-w-5xl mx-auto">
-        {/* Галерея с ПОЛНОЙ блокировкой вертикального движения */}
+        {/* Галерея с POINTER EVENTS */}
         <div className="relative">
           <div 
             ref={imageContainerRef}
@@ -209,11 +231,12 @@ const Product = ({ productId, navigate }) => {
               height: 'auto',
               maxHeight: '600px',
               aspectRatio: '1/1',
-              touchAction: 'none' // ПОЛНОСТЬЮ блокируем стандартное поведение
+              touchAction: 'none' // Блокируем стандартное поведение
             }}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
           >
             {/* Все фото рендерятся одновременно для плавного свайпа */}
             {product.photos.map((photo, index) => (
