@@ -2,6 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { getProduct, viewProduct, getFavorites, addToFavorites, removeFromFavorites, getConfig } from '../utils/api';
 import { getUserId, vibrate, showBackButton, hideBackButton, isRunningInTelegram, openTelegramLink } from '../utils/telegram';
 
+// Высота отступа сверху для "обмана" Telegram
+const SCROLL_OFFSET = 40; // px
+
 const Product = ({ productId, navigate }) => {
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -16,21 +19,12 @@ const Product = ({ productId, navigate }) => {
   const [startX, setStartX] = useState(0);
 
   const imageContainerRef = useRef(null);
-  const SCROLL_OFFSET = 20; // Отступ для автопрокрутки
+  const scrollAppliedRef = useRef(false);
 
   useEffect(() => {
     console.log('📱 Product mounted, ID:', productId);
     loadProduct();
     loadConfig();
-    
-    // АВТОПРОКРУТКА при загрузке - решает проблему свайпа!
-    setTimeout(() => {
-      window.scrollTo({
-        top: SCROLL_OFFSET,
-        behavior: 'instant' // Мгновенно, без анимации
-      });
-      console.log(`📜 Автопрокрутка на ${SCROLL_OFFSET}px`);
-    }, 50);
     
     if (isRunningInTelegram()) {
       showBackButton(() => {
@@ -40,8 +34,24 @@ const Product = ({ productId, navigate }) => {
 
     return () => {
       hideBackButton();
+      scrollAppliedRef.current = false;
     };
   }, [productId]);
+
+  useEffect(() => {
+    // Применяем scroll offset после загрузки товара
+    if (product && !scrollAppliedRef.current) {
+      // Небольшая задержка чтобы элементы успели отрендериться
+      setTimeout(() => {
+        window.scrollTo({
+          top: SCROLL_OFFSET,
+          behavior: 'instant' // Мгновенно, без анимации
+        });
+        scrollAppliedRef.current = true;
+        console.log(`📜 Прокрутка применена: ${SCROLL_OFFSET}px`);
+      }, 50);
+    }
+  }, [product]);
 
   const loadProduct = async () => {
     setLoading(true);
@@ -97,6 +107,7 @@ const Product = ({ productId, navigate }) => {
     vibrate('light');
   };
 
+  // Простой свайп
   const handleTouchStart = (e) => {
     if (!product || product.photos.length <= 1) return;
     
@@ -108,6 +119,7 @@ const Product = ({ productId, navigate }) => {
   const handleTouchMove = (e) => {
     if (!isDragging || !product) return;
     
+    // Блокируем стандартное поведение для галереи
     e.preventDefault();
     
     const currentX = e.touches[0].clientX;
@@ -121,8 +133,6 @@ const Product = ({ productId, navigate }) => {
 
   const handleTouchEnd = () => {
     if (!isDragging || !product) return;
-    
-    setIsDragging(false);
     
     const threshold = 50;
     
@@ -140,6 +150,7 @@ const Product = ({ productId, navigate }) => {
       }
     }
     
+    setIsDragging(false);
     setDragOffset(0);
   };
 
@@ -189,10 +200,12 @@ const Product = ({ productId, navigate }) => {
 
   return (
     <div className="min-h-screen bg-dark-bg pb-24">
+      {/* Кнопка назад для браузера */}
       {!isRunningInTelegram() && (
         <button
           onClick={handleBackClick}
           className="fixed top-4 left-4 z-50 w-10 h-10 bg-dark-card/95 backdrop-blur-sm rounded-full flex items-center justify-center transition-colors duration-200 hover:bg-dark-hover"
+          style={{ top: `${SCROLL_OFFSET + 16}px` }}
         >
           <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -201,41 +214,43 @@ const Product = ({ productId, navigate }) => {
       )}
 
       <div className="max-w-5xl mx-auto">
-        {/* Отступ сверху для автопрокрутки - решает проблему свайпа! */}
-        <div style={{ height: `${SCROLL_OFFSET}px` }} />
-        
+        {/* Отступ сверху для прокрутки */}
+        <div 
+          style={{ height: `${SCROLL_OFFSET}px` }}
+          className="bg-dark-bg"
+        />
+
+        {/* Галерея */}
         <div className="relative">
           <div 
             ref={imageContainerRef}
             className="relative w-full overflow-hidden bg-dark-card select-none"
             style={{ 
-              touchAction: 'pan-y' // Разрешаем вертикальную прокрутку страницы
+              height: 'auto',
+              maxHeight: '600px',
+              aspectRatio: '1/1',
+              touchAction: 'pan-y' // Только вертикальная прокрутка страницы
             }}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
             onTouchCancel={handleTouchEnd}
           >
-            {/* Все фото рендерятся одновременно для плавного свайпа */}
+            {/* Все фото для плавного свайпа */}
             {product.photos.map((photo, index) => (
               <div
                 key={index}
-                className="relative w-full"
+                className="absolute inset-0 w-full h-full flex items-center justify-center bg-black"
                 style={{
                   transform: getImageTransform(index),
                   transition: isDragging ? 'none' : 'transform 0.3s ease-out',
-                  pointerEvents: index === currentImageIndex ? 'auto' : 'none',
-                  position: index === 0 ? 'relative' : 'absolute',
-                  top: index === 0 ? 'auto' : 0,
-                  left: 0,
-                  right: 0
+                  pointerEvents: index === currentImageIndex ? 'auto' : 'none'
                 }}
               >
-                {/* Фото БЕЗ обрезки - object-contain показывает всё фото */}
                 <img
                   src={photo}
                   alt={`${product.name} - фото ${index + 1}`}
-                  className="w-full h-auto max-h-[600px] object-contain bg-dark-card"
+                  className="max-w-full max-h-full object-contain" // object-contain чтобы видеть всё фото
                   style={{ userSelect: 'none', pointerEvents: 'none' }}
                   draggable={false}
                 />
