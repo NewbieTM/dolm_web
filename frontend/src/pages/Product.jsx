@@ -16,12 +16,21 @@ const Product = ({ productId, navigate }) => {
   const [startX, setStartX] = useState(0);
 
   const imageContainerRef = useRef(null);
-  const topSectionRef = useRef(null);
+  const SCROLL_OFFSET = 20; // Отступ для автопрокрутки
 
   useEffect(() => {
     console.log('📱 Product mounted, ID:', productId);
     loadProduct();
     loadConfig();
+    
+    // АВТОПРОКРУТКА при загрузке - решает проблему свайпа!
+    setTimeout(() => {
+      window.scrollTo({
+        top: SCROLL_OFFSET,
+        behavior: 'instant' // Мгновенно, без анимации
+      });
+      console.log(`📜 Автопрокрутка на ${SCROLL_OFFSET}px`);
+    }, 50);
     
     if (isRunningInTelegram()) {
       showBackButton(() => {
@@ -33,20 +42,6 @@ const Product = ({ productId, navigate }) => {
       hideBackButton();
     };
   }, [productId]);
-
-  useEffect(() => {
-    // Автопрокрутка вниз после загрузки для решения проблемы свайпа
-    if (!loading && product && topSectionRef.current) {
-      setTimeout(() => {
-        // Прокручиваем на высоту header (примерно 60-80px)
-        window.scrollTo({
-          top: 70,
-          behavior: 'instant' // Мгновенно, без анимации
-        });
-        console.log('📜 Автопрокрутка выполнена для защиты от сворачивания');
-      }, 50);
-    }
-  }, [loading, product]);
 
   const loadProduct = async () => {
     setLoading(true);
@@ -102,7 +97,6 @@ const Product = ({ productId, navigate }) => {
     vibrate('light');
   };
 
-  // Простой свайп без сложной блокировки
   const handleTouchStart = (e) => {
     if (!product || product.photos.length <= 1) return;
     
@@ -113,6 +107,8 @@ const Product = ({ productId, navigate }) => {
 
   const handleTouchMove = (e) => {
     if (!isDragging || !product) return;
+    
+    e.preventDefault();
     
     const currentX = e.touches[0].clientX;
     const diffX = currentX - startX;
@@ -125,6 +121,8 @@ const Product = ({ productId, navigate }) => {
 
   const handleTouchEnd = () => {
     if (!isDragging || !product) return;
+    
+    setIsDragging(false);
     
     const threshold = 50;
     
@@ -142,7 +140,6 @@ const Product = ({ productId, navigate }) => {
       }
     }
     
-    setIsDragging(false);
     setDragOffset(0);
   };
 
@@ -192,69 +189,54 @@ const Product = ({ productId, navigate }) => {
 
   return (
     <div className="min-h-screen bg-dark-bg pb-24">
-      {/* Header с кнопкой назад и breadcrumb - создаёт отступ сверху */}
-      <div 
-        ref={topSectionRef}
-        className="sticky top-0 z-50 bg-dark-bg/95 backdrop-blur-lg border-b border-gray-800"
-      >
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center gap-3">
-          {/* Кнопка назад */}
-          <button
-            onClick={handleBackClick}
-            className="w-10 h-10 bg-dark-card rounded-full flex items-center justify-center transition-colors duration-200 hover:bg-dark-hover"
-          >
-            <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-
-          {/* Breadcrumb */}
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-gray-400">Каталог</span>
-            <svg className="w-4 h-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-            <span className="text-white">{product.category}</span>
-          </div>
-        </div>
-      </div>
+      {!isRunningInTelegram() && (
+        <button
+          onClick={handleBackClick}
+          className="fixed top-4 left-4 z-50 w-10 h-10 bg-dark-card/95 backdrop-blur-sm rounded-full flex items-center justify-center transition-colors duration-200 hover:bg-dark-hover"
+        >
+          <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+      )}
 
       <div className="max-w-5xl mx-auto">
-        {/* Галерея с ПОЛНЫМ отображением фото */}
+        {/* Отступ сверху для автопрокрутки - решает проблему свайпа! */}
+        <div style={{ height: `${SCROLL_OFFSET}px` }} />
+        
         <div className="relative">
           <div 
             ref={imageContainerRef}
             className="relative w-full overflow-hidden bg-dark-card select-none"
             style={{ 
-              minHeight: '300px',
-              maxHeight: '600px',
-              touchAction: 'pan-y'
+              touchAction: 'pan-y' // Разрешаем вертикальную прокрутку страницы
             }}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
             onTouchCancel={handleTouchEnd}
           >
-            {/* Все фото рендерятся одновременно */}
+            {/* Все фото рендерятся одновременно для плавного свайпа */}
             {product.photos.map((photo, index) => (
               <div
                 key={index}
-                className="absolute inset-0 w-full h-full flex items-center justify-center"
+                className="relative w-full"
                 style={{
                   transform: getImageTransform(index),
                   transition: isDragging ? 'none' : 'transform 0.3s ease-out',
-                  pointerEvents: index === currentImageIndex ? 'auto' : 'none'
+                  pointerEvents: index === currentImageIndex ? 'auto' : 'none',
+                  position: index === 0 ? 'relative' : 'absolute',
+                  top: index === 0 ? 'auto' : 0,
+                  left: 0,
+                  right: 0
                 }}
               >
+                {/* Фото БЕЗ обрезки - object-contain показывает всё фото */}
                 <img
                   src={photo}
                   alt={`${product.name} - фото ${index + 1}`}
-                  className="w-full h-full"
-                  style={{ 
-                    objectFit: 'contain', // ПОЛНОЕ отображение фото!
-                    userSelect: 'none', 
-                    pointerEvents: 'none' 
-                  }}
+                  className="w-full h-auto max-h-[600px] object-contain bg-dark-card"
+                  style={{ userSelect: 'none', pointerEvents: 'none' }}
                   draggable={false}
                 />
               </div>

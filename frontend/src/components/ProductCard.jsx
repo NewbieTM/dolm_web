@@ -20,14 +20,15 @@ const ProductCard = memo(({ product, isFavorite, onToggleFavorite, onNavigate })
       onClick={handleClick}
       className="bg-dark-card rounded-2xl overflow-hidden cursor-pointer transform transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] fade-in"
     >
-      <div className="relative aspect-square bg-dark-hover">
+      {/* Изображение БЕЗ обрезки - object-contain показывает всё фото */}
+      <div className="relative aspect-square bg-dark-hover flex items-center justify-center">
         {!imageLoaded && (
           <div className="absolute inset-0 skeleton" />
         )}
         <img
           src={product.photos[0]}
           alt={product.name}
-          className={`w-full h-full object-cover transition-opacity duration-300 ${
+          className={`w-full h-full object-contain transition-opacity duration-300 ${
             imageLoaded ? 'opacity-100' : 'opacity-0'
           }`}
           onLoad={() => setImageLoaded(true)}
