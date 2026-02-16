@@ -160,13 +160,22 @@ const Product = ({ productId, navigate }) => {
   };
 
   const handleContactManager = () => {
-    if (!managerUsername || !product) return;
+    // ИСПРАВЛЕНИЕ: Проверяем ВСЕ необходимые данные перед отправкой
+    if (!managerUsername || !product || loading) {
+      console.warn('⚠️ Невозможно связаться с менеджером: данные еще не загружены');
+      return;
+    }
     
     vibrate('medium');
     
-    const message = `Здравствуйте, хотелось бы заказать ${product.name} за ${product.price.toLocaleString('ru-RU')} ₽. В наличии сейчас?`;
+    // ИСПРАВЛЕНИЕ: Добавляем дополнительную проверку перед созданием сообщения
+    const productName = product.name || 'товар';
+    const productPrice = product.price || 0;
+    
+    const message = `Здравствуйте, хотелось бы заказать ${productName} за ${productPrice.toLocaleString('ru-RU')} ₽. В наличии сейчас?`;
     const encodedMessage = encodeURIComponent(message);
     
+    console.log('📤 Отправка сообщения:', message);
     openTelegramLink(`https://t.me/${managerUsername}?text=${encodedMessage}`);
   };
 
@@ -197,6 +206,9 @@ const Product = ({ productId, navigate }) => {
     
     return `translateX(${baseTranslate}%)`;
   };
+
+  // ИСПРАВЛЕНИЕ: Вычисляем состояние кнопки
+  const isButtonDisabled = loading || !product || !managerUsername;
 
   return (
     <div className="min-h-screen bg-dark-bg pb-24">
@@ -229,7 +241,7 @@ const Product = ({ productId, navigate }) => {
               height: 'auto',
               maxHeight: '600px',
               aspectRatio: '1/1',
-              touchAction: 'pan-y' // Только вертикальная прокрутка страницы
+              touchAction: 'pan-y'
             }}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
@@ -243,66 +255,69 @@ const Product = ({ productId, navigate }) => {
                 className="absolute inset-0 w-full h-full flex items-center justify-center bg-black"
                 style={{
                   transform: getImageTransform(index),
-                  transition: isDragging ? 'none' : 'transform 0.3s ease-out',
+                  transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                   pointerEvents: index === currentImageIndex ? 'auto' : 'none'
                 }}
               >
                 <img
                   src={photo}
                   alt={`${product.name} - фото ${index + 1}`}
-                  className="max-w-full max-h-full object-contain" // object-contain чтобы видеть всё фото
-                  style={{ userSelect: 'none', pointerEvents: 'none' }}
-                  draggable={false}
+                  className="w-full h-full object-contain"
+                  draggable="false"
                 />
               </div>
             ))}
-            
-            {/* Кнопка избранного */}
-            <button
-              onClick={handleFavoriteClick}
-              className="absolute top-4 right-4 w-12 h-12 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center transition-colors duration-200 hover:bg-black/70 z-10"
-            >
-              <svg
-                className={`w-6 h-6 transition-all duration-200 ${
-                  isFavorite 
-                    ? 'fill-red-500 stroke-red-500' 
-                    : 'fill-none stroke-white'
-                }`}
-                viewBox="0 0 24 24"
-                strokeWidth="2"
-              >
-                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-              </svg>
-            </button>
+          </div>
 
-            {/* Индикаторы фото */}
-            {product.photos.length > 1 && (
-              <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-2 px-4 z-10">
+          {/* Индикаторы фото и избранное */}
+          {product.photos.length > 1 && (
+            <div className="absolute bottom-0 left-0 right-0 p-4 flex justify-between items-end">
+              {/* Индикаторы */}
+              <div className="flex gap-1.5">
                 {product.photos.map((_, index) => (
                   <button
                     key={index}
                     onClick={() => handleImageClick(index)}
-                    className={`h-2 rounded-full transition-all duration-200 ${
-                      currentImageIndex === index
-                        ? 'w-8 bg-white'
-                        : 'w-2 bg-white/50 hover:bg-white/70'
+                    className={`h-1.5 rounded-full transition-all duration-200 ${
+                      index === currentImageIndex 
+                        ? 'w-8 bg-white' 
+                        : 'w-1.5 bg-white/40'
                     }`}
+                    aria-label={`Фото ${index + 1}`}
                   />
                 ))}
               </div>
-            )}
-          </div>
 
-          {/* Миниатюры для desktop */}
+              {/* Избранное */}
+              <button
+                onClick={handleFavoriteClick}
+                className="w-11 h-11 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center transition-colors duration-200 hover:bg-black/70"
+              >
+                <svg
+                  className={`w-6 h-6 transition-all duration-200 ${
+                    isFavorite 
+                      ? 'fill-red-500 stroke-red-500' 
+                      : 'fill-none stroke-white'
+                  }`}
+                  viewBox="0 0 24 24"
+                  strokeWidth="2"
+                >
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                </svg>
+              </button>
+            </div>
+          )}
+
+          {/* Миниатюры для десктопа */}
           {product.photos.length > 1 && (
-            <div className="hidden md:block px-4 pt-4">
+            <div className="hidden md:block mt-4 px-6">
               <div className="flex gap-2 overflow-x-auto pb-2">
                 {product.photos.map((photo, index) => (
                   <button
                     key={index}
                     onClick={() => handleImageClick(index)}
                     className={`flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 transition-all duration-200 ${
-                      currentImageIndex === index
+                      index === currentImageIndex 
                         ? 'border-accent scale-105'
                         : 'border-white/20 opacity-60 hover:opacity-100'
                     }`}
@@ -354,16 +369,30 @@ const Product = ({ productId, navigate }) => {
             </p>
           </div>
 
-          {/* Кнопка связаться с менеджером */}
+          {/* ИСПРАВЛЕННАЯ Кнопка связаться с менеджером */}
           {managerUsername && (
             <button
               onClick={handleContactManager}
-              className="w-full bg-accent text-white font-semibold py-4 rounded-xl hover:bg-accent/90 transition-all duration-200 flex items-center justify-center gap-3 shadow-lg shadow-accent/20"
+              disabled={isButtonDisabled}
+              className={`w-full font-semibold py-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-3 shadow-lg ${
+                isButtonDisabled
+                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed opacity-50'
+                  : 'bg-accent text-white hover:bg-accent/90 shadow-accent/20'
+              }`}
             >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
-              Связаться с менеджером
+              {loading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  Загрузка...
+                </>
+              ) : (
+                <>
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  Связаться с менеджером
+                </>
+              )}
             </button>
           )}
         </div>
