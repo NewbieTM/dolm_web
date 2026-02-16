@@ -99,136 +99,17 @@ ${isMainAdmin ? '\n👥 Управление админами:\n/list_admins - �
   `);
 });
 
-bot.onText(/\/list_admins/, async (msg) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  
-  if (userId !== ADMIN_ID) {
-    await bot.sendMessage(chatId, '❌ Только главный админ может видеть список админов');
-    return;
-  }
-  
-  try {
-    const admins = await loadAdmins();
-    
-    let message = `👥 Администраторы (${admins.length}):\n\n`;
-    for (const adminId of admins) {
-      const isMain = adminId === ADMIN_ID;
-      message += `${isMain ? '👑' : '👤'} ${adminId}${isMain ? ' (главный)' : ''}\n`;
-    }
-    
-    await bot.sendMessage(chatId, message);
-  } catch (error) {
-    console.error('❌ Ошибка:', error);
-    await bot.sendMessage(chatId, `❌ Ошибка: ${error.message}`);
-  }
-});
-
-bot.onText(/\/add_admin (.+)/, async (msg, match) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  const newAdminId = parseInt(match[1]);
-  
-  if (userId !== ADMIN_ID) {
-    await bot.sendMessage(chatId, '❌ Только главный админ может добавлять админов');
-    return;
-  }
-  
-  if (isNaN(newAdminId)) {
-    await bot.sendMessage(chatId, '❌ Неправильный ID. Используйте: /add_admin [ID]');
-    return;
-  }
-  
-  try {
-    const admins = await loadAdmins();
-    
-    if (admins.includes(newAdminId)) {
-      await bot.sendMessage(chatId, '⚠️ Этот пользователь уже админ');
-      return;
-    }
-    
-    admins.push(newAdminId);
-    await saveAdmins(admins);
-    
-    await bot.sendMessage(chatId, `✅ Админ ${newAdminId} добавлен`);
-    
-    try {
-      await bot.sendMessage(newAdminId, `
-🎉 Вы получили права администратора!
-
-Используйте /admin для просмотра доступных команд.
-        `);
-      } catch (error) {
-        // Бот заблокирован у пользователя
-      }
-      
-    } catch (error) {
-      await bot.sendMessage(chatId, `❌ Пользователь с ID ${newAdminId} не найден. Убедитесь что пользователь хотя бы раз писал боту.`);
-    }
-  } catch (error) {
-    console.error('❌ Ошибка:', error);
-    await bot.sendMessage(chatId, `❌ Ошибка: ${error.message}`);
-  }
-});
-
-bot.onText(/\/remove_admin (.+)/, async (msg, match) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  const adminIdToRemove = parseInt(match[1]);
-  
-  if (userId !== ADMIN_ID) {
-    await bot.sendMessage(chatId, '❌ Только главный админ может удалять админов');
-    return;
-  }
-  
-  if (isNaN(adminIdToRemove)) {
-    await bot.sendMessage(chatId, '❌ Неправильный ID. Используйте: /remove_admin [ID]');
-    return;
-  }
-  
-  if (adminIdToRemove === ADMIN_ID) {
-    await bot.sendMessage(chatId, '❌ Нельзя удалить главного админа');
-    return;
-  }
-  
-  try {
-    const admins = await loadAdmins();
-    
-    if (!admins.includes(adminIdToRemove)) {
-      await bot.sendMessage(chatId, '⚠️ Этот пользователь не является админом');
-      return;
-    }
-    
-    const updatedAdmins = admins.filter(id => id !== adminIdToRemove);
-    await saveAdmins(updatedAdmins);
-    
-    await bot.sendMessage(chatId, `✅ Админ ${adminIdToRemove} удалён`);
-    
-    try {
-      await bot.sendMessage(adminIdToRemove, '⚠️ Ваши права администратора были отозваны');
-    } catch (error) {
-      // Не удалось отправить
-    }
-  } catch (error) {
-    console.error('❌ Ошибка:', error);
-    await bot.sendMessage(chatId, `❌ Ошибка: ${error.message}`);
-  }
-});
-
-// ========== ТОВАРЫ ==========
-
 bot.onText(/\/add_product/, async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
   
   if (!(await isAdmin(userId))) return;
   
-  // ИСПРАВЛЕНИЕ: Инициализируем photos как массив объектов с порядком
-  tempProductData[chatId] = { 
-    step: 'name',
-    photos: [] // Будем хранить { url, messageId, timestamp }
+  tempProductData[chatId] = {
+    step: 'name'
   };
-  await bot.sendMessage(chatId, '📝 Введите название товара:');
+  
+  await bot.sendMessage(chatId, '📌 Введите название товара:');
 });
 
 bot.onText(/\/edit_product (.+)/, async (msg, match) => {
@@ -379,17 +260,10 @@ bot.onText(/\/done/, async (msg) => {
       return;
     }
     
-    // ИСПРАВЛЕНИЕ: Сортируем фотографии по порядку перед сохранением
+    // ИСПРАВЛЕНИЕ: Сортируем фото по message_id перед сохранением
     const sortedPhotos = data.photos
-      .sort((a, b) => {
-        // Сначала по timestamp, если есть
-        if (a.timestamp && b.timestamp) {
-          return a.timestamp - b.timestamp;
-        }
-        // Иначе по messageId
-        return a.messageId - b.messageId;
-      })
-      .map(p => p.url); // Извлекаем только URL
+      .sort((a, b) => a.messageId - b.messageId)
+      .map(photo => photo.url);
     
     const product = await db.addProduct({
       name: data.name,
@@ -435,15 +309,10 @@ bot.onText(/\/done_photos/, async (msg) => {
     return;
   }
   
-  // ИСПРАВЛЕНИЕ: Сортируем фотографии при редактировании
+  // ИСПРАВЛЕНИЕ: Сортируем фото по message_id перед сохранением
   const sortedPhotos = editData.newPhotos
-    .sort((a, b) => {
-      if (a.timestamp && b.timestamp) {
-        return a.timestamp - b.timestamp;
-      }
-      return a.messageId - b.messageId;
-    })
-    .map(p => p.url);
+    .sort((a, b) => a.messageId - b.messageId)
+    .map(photo => photo.url);
   
   editData.product.photos = sortedPhotos;
   delete editData.editing;
@@ -470,8 +339,7 @@ bot.on('callback_query', async (query) => {
     const category = query.data.replace('cat_', '');
     data.category = category;
     data.step = 'photo';
-    // ИСПРАВЛЕНИЕ: Инициализируем массив для объектов фото
-    data.photos = [];
+    data.photos = []; // ИСПРАВЛЕНИЕ: Теперь массив объектов
     
     await bot.answerCallbackQuery(query.id, { text: `Категория: ${category}` });
     await bot.sendMessage(chatId, `
@@ -521,8 +389,7 @@ bot.on('callback_query', async (query) => {
       
     case 'edit_photos':
       editData.editing = 'photos';
-      // ИСПРАВЛЕНИЕ: Инициализируем массив для объектов фото
-      editData.newPhotos = [];
+      editData.newPhotos = []; // ИСПРАВЛЕНИЕ: Теперь массив объектов
       await bot.answerCallbackQuery(query.id);
       await bot.sendMessage(chatId, `
 📸 Отправьте новые фото (заменят старые)
@@ -656,7 +523,7 @@ bot.on('message', async (msg) => {
   }
 });
 
-// ИСПРАВЛЕННЫЙ: Обработка фото
+// Обработка фото
 bot.on('photo', async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
@@ -670,6 +537,8 @@ bot.on('photo', async (msg) => {
   
   try {
     const photo = msg.photo[msg.photo.length - 1];
+    const messageId = msg.message_id; // ИСПРАВЛЕНИЕ: Сохраняем message_id для порядка
+    
     await bot.sendMessage(chatId, '⏳ Загружаем фото...');
     
     const photoUrl = await uploadTelegramPhoto(bot, photo.file_id);
@@ -679,21 +548,16 @@ bot.on('photo', async (msg) => {
       return;
     }
     
-    // ИСПРАВЛЕНИЕ: Сохраняем фото с messageId и timestamp для правильного порядка
-    const photoData = {
-      url: photoUrl,
-      messageId: msg.message_id,
-      timestamp: msg.date * 1000 // Telegram присылает в секундах, конвертируем в мс
-    };
-    
+    // ИСПРАВЛЕНИЕ: Сохраняем фото с message_id
     if (data && data.step === 'photo') {
-      data.photos.push(photoData);
+      data.photos.push({ url: photoUrl, messageId: messageId });
       await bot.sendMessage(chatId, `✅ Фото ${data.photos.length} добавлено\n\nМожете добавить ещё или /done`);
       return;
     }
     
+    // ИСПРАВЛЕНИЕ: Сохраняем фото с message_id при редактировании
     if (editData && editData.editing === 'photos') {
-      editData.newPhotos.push(photoData);
+      editData.newPhotos.push({ url: photoUrl, messageId: messageId });
       await bot.sendMessage(chatId, `✅ Фото ${editData.newPhotos.length} добавлено\n\n/done_photos когда закончите`);
       return;
     }
