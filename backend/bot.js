@@ -96,35 +96,25 @@ bot.onText(/\/admin/, async (msg) => {
 ${isMainAdmin ? '\n👥 Управление админами:\n/list_admins - Список админов\n/add_admin [ID] - Добавить админа\n/remove_admin [ID] - Удалить админа' : ''}
 
 📦 БД: ${USE_MONGODB ? 'MongoDB ✅' : 'JSON 📁'}
-👥 Админов: ${admins.length}
   `);
 });
-
-// ========== УПРАВЛЕНИЕ АДМИНАМИ ==========
 
 bot.onText(/\/list_admins/, async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
   
   if (userId !== ADMIN_ID) {
-    await bot.sendMessage(chatId, '❌ Только главный админ может просматривать список админов');
+    await bot.sendMessage(chatId, '❌ Только главный админ может видеть список админов');
     return;
   }
   
   try {
     const admins = await loadAdmins();
     
-    let message = `👥 Список админов (${admins.length}):\n\n`;
-    
+    let message = `👥 Администраторы (${admins.length}):\n\n`;
     for (const adminId of admins) {
-      try {
-        const chat = await bot.getChat(adminId);
-        const name = chat.first_name || chat.username || `ID: ${adminId}`;
-        const isMain = adminId === ADMIN_ID ? ' 👑 (главный)' : '';
-        message += `• ${name}${isMain}\n  ID: ${adminId}\n\n`;
-      } catch (error) {
-        message += `• ID: ${adminId}\n\n`;
-      }
+      const isMain = adminId === ADMIN_ID;
+      message += `${isMain ? '👑' : '👤'} ${adminId}${isMain ? ' (главный)' : ''}\n`;
     }
     
     await bot.sendMessage(chatId, message);
@@ -153,22 +143,18 @@ bot.onText(/\/add_admin (.+)/, async (msg, match) => {
     const admins = await loadAdmins();
     
     if (admins.includes(newAdminId)) {
-      await bot.sendMessage(chatId, '⚠️ Этот пользователь уже является админом');
+      await bot.sendMessage(chatId, '⚠️ Этот пользователь уже админ');
       return;
     }
     
+    admins.push(newAdminId);
+    await saveAdmins(admins);
+    
+    await bot.sendMessage(chatId, `✅ Админ ${newAdminId} добавлен`);
+    
     try {
-      const chat = await bot.getChat(newAdminId);
-      const name = chat.first_name || chat.username || `ID: ${newAdminId}`;
-      
-      admins.push(newAdminId);
-      await saveAdmins(admins);
-      
-      await bot.sendMessage(chatId, `✅ Пользователь ${name} (${newAdminId}) добавлен в админы!`);
-      
-      try {
-        await bot.sendMessage(newAdminId, `
-🎉 Вам предоставлены права администратора!
+      await bot.sendMessage(newAdminId, `
+🎉 Вы получили права администратора!
 
 Используйте /admin для просмотра доступных команд.
         `);
@@ -237,7 +223,11 @@ bot.onText(/\/add_product/, async (msg) => {
   
   if (!(await isAdmin(userId))) return;
   
-  tempProductData[chatId] = { step: 'name' };
+  // ИСПРАВЛЕНИЕ: Инициализируем photos как массив объектов с порядком
+  tempProductData[chatId] = { 
+    step: 'name',
+    photos: [] // Будем хранить { url, messageId, timestamp }
+  };
   await bot.sendMessage(chatId, '📝 Введите название товара:');
 });
 
@@ -389,17 +379,24 @@ bot.onText(/\/done/, async (msg) => {
       return;
     }
     
-    // ✅ НОВОЕ! Сортируем фото по messageId перед сохранением
+    // ИСПРАВЛЕНИЕ: Сортируем фотографии по порядку перед сохранением
     const sortedPhotos = data.photos
-      .sort((a, b) => a.messageId - b.messageId)  // Сортируем по возрастанию messageId
-      .map(item => item.url);  // Берем только URL
+      .sort((a, b) => {
+        // Сначала по timestamp, если есть
+        if (a.timestamp && b.timestamp) {
+          return a.timestamp - b.timestamp;
+        }
+        // Иначе по messageId
+        return a.messageId - b.messageId;
+      })
+      .map(p => p.url); // Извлекаем только URL
     
     const product = await db.addProduct({
       name: data.name,
       price: data.price,
       description: data.description,
       category: data.category,
-      photos: sortedPhotos  // ✅ Отсортированный массив URL
+      photos: sortedPhotos
     });
     
     if (product) {
@@ -438,12 +435,17 @@ bot.onText(/\/done_photos/, async (msg) => {
     return;
   }
   
-  // ✅ НОВОЕ! Сортируем фото по messageId перед сохранением
+  // ИСПРАВЛЕНИЕ: Сортируем фотографии при редактировании
   const sortedPhotos = editData.newPhotos
-    .sort((a, b) => a.messageId - b.messageId)
-    .map(item => item.url);
+    .sort((a, b) => {
+      if (a.timestamp && b.timestamp) {
+        return a.timestamp - b.timestamp;
+      }
+      return a.messageId - b.messageId;
+    })
+    .map(p => p.url);
   
-  editData.product.photos = sortedPhotos;  // ✅ Отсортированный массив URL
+  editData.product.photos = sortedPhotos;
   delete editData.editing;
   delete editData.newPhotos;
   
@@ -468,6 +470,7 @@ bot.on('callback_query', async (query) => {
     const category = query.data.replace('cat_', '');
     data.category = category;
     data.step = 'photo';
+    // ИСПРАВЛЕНИЕ: Инициализируем массив для объектов фото
     data.photos = [];
     
     await bot.answerCallbackQuery(query.id, { text: `Категория: ${category}` });
@@ -518,6 +521,7 @@ bot.on('callback_query', async (query) => {
       
     case 'edit_photos':
       editData.editing = 'photos';
+      // ИСПРАВЛЕНИЕ: Инициализируем массив для объектов фото
       editData.newPhotos = [];
       await bot.answerCallbackQuery(query.id);
       await bot.sendMessage(chatId, `
@@ -652,7 +656,7 @@ bot.on('message', async (msg) => {
   }
 });
 
-// Обработка фото
+// ИСПРАВЛЕННЫЙ: Обработка фото
 bot.on('photo', async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
@@ -666,8 +670,6 @@ bot.on('photo', async (msg) => {
   
   try {
     const photo = msg.photo[msg.photo.length - 1];
-    const messageId = msg.message_id;  // ✅ НОВОЕ! Получаем message_id
-    
     await bot.sendMessage(chatId, '⏳ Загружаем фото...');
     
     const photoUrl = await uploadTelegramPhoto(bot, photo.file_id);
@@ -677,16 +679,21 @@ bot.on('photo', async (msg) => {
       return;
     }
     
+    // ИСПРАВЛЕНИЕ: Сохраняем фото с messageId и timestamp для правильного порядка
+    const photoData = {
+      url: photoUrl,
+      messageId: msg.message_id,
+      timestamp: msg.date * 1000 // Telegram присылает в секундах, конвертируем в мс
+    };
+    
     if (data && data.step === 'photo') {
-      // ✅ НОВОЕ! Сохраняем с messageId
-      data.photos.push({ url: photoUrl, messageId: messageId });
+      data.photos.push(photoData);
       await bot.sendMessage(chatId, `✅ Фото ${data.photos.length} добавлено\n\nМожете добавить ещё или /done`);
       return;
     }
     
     if (editData && editData.editing === 'photos') {
-      // ✅ НОВОЕ! Сохраняем с messageId
-      editData.newPhotos.push({ url: photoUrl, messageId: messageId });
+      editData.newPhotos.push(photoData);
       await bot.sendMessage(chatId, `✅ Фото ${editData.newPhotos.length} добавлено\n\n/done_photos когда закончите`);
       return;
     }
