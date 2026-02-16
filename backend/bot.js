@@ -389,12 +389,17 @@ bot.onText(/\/done/, async (msg) => {
       return;
     }
     
+    // ✅ НОВОЕ! Сортируем фото по messageId перед сохранением
+    const sortedPhotos = data.photos
+      .sort((a, b) => a.messageId - b.messageId)  // Сортируем по возрастанию messageId
+      .map(item => item.url);  // Берем только URL
+    
     const product = await db.addProduct({
       name: data.name,
       price: data.price,
       description: data.description,
       category: data.category,
-      photos: data.photos
+      photos: sortedPhotos  // ✅ Отсортированный массив URL
     });
     
     if (product) {
@@ -433,7 +438,12 @@ bot.onText(/\/done_photos/, async (msg) => {
     return;
   }
   
-  editData.product.photos = editData.newPhotos;
+  // ✅ НОВОЕ! Сортируем фото по messageId перед сохранением
+  const sortedPhotos = editData.newPhotos
+    .sort((a, b) => a.messageId - b.messageId)
+    .map(item => item.url);
+  
+  editData.product.photos = sortedPhotos;  // ✅ Отсортированный массив URL
   delete editData.editing;
   delete editData.newPhotos;
   
@@ -656,6 +666,8 @@ bot.on('photo', async (msg) => {
   
   try {
     const photo = msg.photo[msg.photo.length - 1];
+    const messageId = msg.message_id;  // ✅ НОВОЕ! Получаем message_id
+    
     await bot.sendMessage(chatId, '⏳ Загружаем фото...');
     
     const photoUrl = await uploadTelegramPhoto(bot, photo.file_id);
@@ -666,13 +678,15 @@ bot.on('photo', async (msg) => {
     }
     
     if (data && data.step === 'photo') {
-      data.photos.push(photoUrl);
+      // ✅ НОВОЕ! Сохраняем с messageId
+      data.photos.push({ url: photoUrl, messageId: messageId });
       await bot.sendMessage(chatId, `✅ Фото ${data.photos.length} добавлено\n\nМожете добавить ещё или /done`);
       return;
     }
     
     if (editData && editData.editing === 'photos') {
-      editData.newPhotos.push(photoUrl);
+      // ✅ НОВОЕ! Сохраняем с messageId
+      editData.newPhotos.push({ url: photoUrl, messageId: messageId });
       await bot.sendMessage(chatId, `✅ Фото ${editData.newPhotos.length} добавлено\n\n/done_photos когда закончите`);
       return;
     }
