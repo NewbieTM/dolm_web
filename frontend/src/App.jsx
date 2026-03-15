@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Catalog from './pages/Catalog';
 import Product from './pages/Product';
 import Favorites from './pages/Favorites';
+import Preorder from './pages/Preorder';
 import { initTelegramApp, isRunningInTelegram } from './utils/telegram';
 import { initTooltipTimer } from './utils/tooltipManager';
 
@@ -16,31 +17,30 @@ function App() {
     console.log('🚀 =================================');
     console.log('🌐 URL:', window.location.href);
     console.log('🔗 API URL:', import.meta.env.VITE_API_URL);
-    
+
     try {
       console.log('🔧 Инициализация Telegram SDK...');
       const tg = initTelegramApp();
-      
+
       if (tg) {
         console.log('📱 Telegram SDK: ✅ Загружен');
       } else {
         console.log('📱 Telegram SDK: ⚠️  Недоступен');
       }
-      
+
       const inTelegram = isRunningInTelegram();
       console.log('📱 В Telegram:', inTelegram ? 'ДА' : 'НЕТ');
-      
-      // Инициализируем глобальный таймер подсказки
+
       console.log('⏱️  Инициализация таймера подсказки...');
       initTooltipTimer();
-      
+
       console.log('✅ App готов к работе!');
       setIsReady(true);
     } catch (err) {
       console.error('❌ Ошибка инициализации:', err);
       setIsReady(true);
     }
-    
+
     console.log('🚀 =================================');
   }, []);
 
@@ -58,6 +58,11 @@ function App() {
     toFavorites: () => {
       console.log('📍 Навигация: Избранное');
       setCurrentPage('favorites');
+      setCurrentProductId(null);
+    },
+    toPreorder: () => {
+      console.log('📍 Навигация: На заказ');
+      setCurrentPage('preorder');
       setCurrentProductId(null);
     },
     back: () => {
@@ -85,13 +90,17 @@ function App() {
       {currentPage === 'catalog' && (
         <Catalog navigate={navigate} />
       )}
-      
+
       {currentPage === 'product' && currentProductId && (
         <Product productId={currentProductId} navigate={navigate} />
       )}
-      
+
       {currentPage === 'favorites' && (
         <Favorites navigate={navigate} />
+      )}
+
+      {currentPage === 'preorder' && (
+        <Preorder navigate={navigate} />
       )}
     </div>
   );

@@ -128,23 +128,6 @@ app.get('/api/products/:id', async (req, res) => {
   }
 });
 
-app.post('/api/products/:id/view', async (req, res) => {
-  try {
-    const { id } = req.params;
-    await db.incrementProductViews(id);
-    
-    res.json({
-      success: true,
-      message: 'Просмотр зафиксирован'
-    });
-  } catch (error) {
-    console.error('Ошибка фиксации просмотра:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Ошибка'
-    });
-  }
-});
 
 // ========== CATEGORIES ==========
 

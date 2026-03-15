@@ -128,12 +128,16 @@ async function addProduct(product) {
     const database = await connectDB();
     const newProduct = {
       id: Date.now().toString(),
-      ...product,
-      createdAt: new Date().toISOString(),
-      views: 0
+      name: product.name,
+      price: product.price,
+      description: product.description,
+      category: product.category,
+      isPreorder: product.isPreorder || false,   // <-- НОВОЕ ПОЛЕ
+      photos: product.photos || [],
+      createdAt: new Date().toISOString()
     };
     await database.collection('products').insertOne(newProduct);
-    console.log('✅ Товар добавлен:', newProduct.id);
+    console.log('✅ Товар добавлен:', newProduct.id, newProduct.isPreorder ? '📦 На заказ' : '✅ В наличии');
     return newProduct;
   } catch (error) {
     console.error('Ошибка добавления товара:', error.message);
@@ -166,33 +170,38 @@ async function deleteProduct(id) {
   }
 }
 
-async function filterProducts({ category, search, sort }) {
+async function filterProducts({ category, search, sort, isPreorder }) {
   try {
     const database = await connectDB();
     let query = {};
-    
+
     if (category) {
       query.category = category;
     }
-    
+
+    // Фильтр по статусу preorder
+    if (isPreorder !== undefined && isPreorder !== null && isPreorder !== '') {
+      const preorderFlag = isPreorder === true || isPreorder === 'true';
+      query.isPreorder = preorderFlag;
+    }
+
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
         { description: { $regex: search, $options: 'i' } }
       ];
     }
-    
+
     let sortOptions = {};
     if (sort === 'price_asc') sortOptions.price = 1;
     else if (sort === 'price_desc') sortOptions.price = -1;
-    else if (sort === 'popular') sortOptions.views = -1;
     else sortOptions.createdAt = -1;
-    
+
     const products = await database.collection('products')
       .find(query)
       .sort(sortOptions)
       .toArray();
-    
+
     return products;
   } catch (error) {
     console.error('Ошибка фильтрации товаров:', error.message);

@@ -22,71 +22,63 @@ api.interceptors.response.use(
 // ========== PRODUCTS ==========
 
 export const getProducts = async (filters = {}) => {
-  // Создаем уникальный ключ кеша на основе фильтров
   const cacheKey = `products_${JSON.stringify(filters)}`;
-  
-  // Проверяем кеш
+
   const cached = getCache(cacheKey);
   if (cached) {
     return cached;
   }
-  
-  // Загружаем с сервера
+
   const params = new URLSearchParams();
-  
+
   if (filters.category) params.append('category', filters.category);
   if (filters.search) params.append('search', filters.search);
   if (filters.sort) params.append('sort', filters.sort);
-  
+  // Фильтр по preorder
+  if (filters.isPreorder !== undefined) params.append('isPreorder', filters.isPreorder);
+
   const response = await api.get(`/api/products?${params.toString()}`);
-  
-  // Сохраняем в кеш
+
   setCache(cacheKey, response.data);
-  
+
   return response.data;
 };
 
 export const getProduct = async (id) => {
   const cacheKey = `product_${id}`;
-  
+
   const cached = getCache(cacheKey);
   if (cached) {
     return cached;
   }
-  
+
   const response = await api.get(`/api/products/${id}`);
   setCache(cacheKey, response.data);
-  
+
   return response.data;
 };
 
-export const viewProduct = async (id) => {
-  const response = await api.post(`/api/products/${id}/view`);
-  // Инвалидируем кеш товара после просмотра
-  clearCache(`product_${id}`);
-  return response.data;
-};
+// viewProduct УДАЛЁН — логика просмотров убрана
 
 // ========== CATEGORIES ==========
 
 export const getCategories = async () => {
   const cacheKey = 'categories';
-  
+
   const cached = getCache(cacheKey);
   if (cached) {
     return cached;
   }
-  
+
   const response = await api.get('/api/categories');
   setCache(cacheKey, response.data);
-  
+
   return response.data;
 };
 
 // ========== FAVORITES ==========
 
 export const getFavorites = async (userId) => {
-  // Не кешируем избранное - оно меняется часто
   const response = await api.get(`/api/users/${userId}/favorites`);
   return response.data;
 };
@@ -115,13 +107,13 @@ export const addToHistory = async (userId, productId) => {
 
 // ========== USER ==========
 
-export const upsertUser = async (userId, userData) => {
-  const response = await api.post(`/api/users/${userId}`, userData);
+export const getUser = async (userId) => {
+  const response = await api.get(`/api/users/${userId}`);
   return response.data;
 };
 
-export const getUser = async (userId) => {
-  const response = await api.get(`/api/users/${userId}`);
+export const upsertUser = async (userId, userData) => {
+  const response = await api.post(`/api/users/${userId}`, userData);
   return response.data;
 };
 
@@ -129,23 +121,14 @@ export const getUser = async (userId) => {
 
 export const getConfig = async () => {
   const cacheKey = 'config';
-  
+
   const cached = getCache(cacheKey);
   if (cached) {
     return cached;
   }
-  
+
   const response = await api.get('/api/config');
   setCache(cacheKey, response.data);
-  
+
   return response.data;
 };
-
-// ========== STATS ==========
-
-export const getStats = async () => {
-  const response = await api.get('/api/stats');
-  return response.data;
-};
-
-export default api;

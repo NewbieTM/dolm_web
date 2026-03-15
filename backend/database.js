@@ -76,14 +76,22 @@ async function getProductById(id) {
 // Добавить товар
 async function addProduct(product) {
   const products = await getAllProducts();
+
   const newProduct = {
     id: Date.now().toString(),
-    ...product,
-    createdAt: new Date().toISOString(),
-    views: 0
+    name: product.name,
+    price: product.price,
+    description: product.description,
+    category: product.category,
+    isPreorder: product.isPreorder || false,   // <-- НОВОЕ ПОЛЕ
+    photos: product.photos || [],
+    createdAt: new Date().toISOString()
   };
+
   products.push(newProduct);
   await writeJSON(PRODUCTS_FILE, products);
+
+  console.log('✅ Товар добавлен:', newProduct.id, newProduct.isPreorder ? '📦 На заказ' : '✅ В наличии');
   return newProduct;
 }
 
@@ -111,33 +119,37 @@ async function deleteProduct(id) {
 // Фильтрация товаров
 async function filterProducts(filters = {}) {
   let products = await getAllProducts();
-  
+
   // Фильтр по категории
   if (filters.category) {
     products = products.filter(p => p.category === filters.category);
   }
-  
+
+  // Фильтр по статусу (preorder / in stock)
+  if (filters.isPreorder !== undefined && filters.isPreorder !== null && filters.isPreorder !== '') {
+    const preorderFlag = filters.isPreorder === true || filters.isPreorder === 'true';
+    products = products.filter(p => (p.isPreorder || false) === preorderFlag);
+  }
+
   // Поиск по названию
   if (filters.search) {
     const search = filters.search.toLowerCase();
-    products = products.filter(p => 
+    products = products.filter(p =>
       p.name.toLowerCase().includes(search) ||
       p.description.toLowerCase().includes(search)
     );
   }
-  
+
   // Сортировка
   if (filters.sort === 'price_asc') {
     products.sort((a, b) => a.price - b.price);
   } else if (filters.sort === 'price_desc') {
     products.sort((a, b) => b.price - a.price);
-  } else if (filters.sort === 'views') {
-    products.sort((a, b) => b.views - a.views);
   } else {
-    // По умолчанию - новые сначала
+    // По умолчанию — новые сначала
     products.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }
-  
+
   return products;
 }
 
