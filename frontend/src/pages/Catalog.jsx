@@ -59,7 +59,7 @@ const CategoryCard = ({ name, emoji, desc, stats, onClick }) => {
         <div className="flex items-end justify-between">
           <div className="flex-1 min-w-0">
             <p className="text-white font-bold text-lg leading-tight truncate">{name}</p>
-            {desc ? <p className="text-gray-300 text-xs mt-0.5 leading-tight opacity-80">{desc}</p> : null}
+            {desc ? <p className="text-white/95 text-xs mt-0.5 leading-tight drop-shadow-md">{desc}</p> : null}
           </div>
           <span className="text-2xl ml-2 flex-shrink-0">{emoji}</span>
         </div>
