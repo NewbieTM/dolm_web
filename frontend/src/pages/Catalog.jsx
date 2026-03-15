@@ -8,11 +8,11 @@ import { getUserId, vibrate } from '../utils/telegram';
 
 // Метаданные категорий: эмодзи и подпись
 const CATEGORY_META = {
-  'Худи':      { emoji: '👕', desc: 'Оверсайз, зип, классика' },
-  'Футболки':  { emoji: '👔', desc: 'Базовые и принтованные' },
-  'Обувь':     { emoji: '👟', desc: 'Кроссовки, ботинки, сандалии' },
-  'Сумки':     { emoji: '👜', desc: 'Шопперы, кросс-боди, рюкзаки' },
-  'Косметика': { emoji: '💄', desc: 'Уход, макияж, парфюм' },
+  'Худи':      { emoji: '🥷🏼', desc: 'Erd, Vetements, Balenciaga, Dior...' },
+  'Футболки':  { emoji: '👕', desc: 'Erd, Balenciaga, Vetements, Dior, Louis Vuitton, YSL...' },
+  'Обувь':     { emoji: '👟', desc: 'Balenciaga, Nike...' },
+  'Сумки':     { emoji: '👜', desc: 'Hermes Birkin, Louis Vuitton, Chanel, Prada, Balenciaga...' },
+  'Косметика': { emoji: '💄', desc: 'Rhode, Huda Beauty, Summer Fridays, Dior...' },
 };
 const DEFAULT_META = { emoji: '🛍️', desc: '' };
 
