@@ -10,9 +10,10 @@ import { getUserId, vibrate } from '../utils/telegram';
 const CATEGORY_META = {
   'Худи':      { emoji: '🥷🏼', desc: 'Erd, Vetements, Balenciaga, Dior' },
   'Футболки':  { emoji: '👕', desc: 'Erd, Balenciaga, Vetements, Dior, Louis Vuitton' },
-  'Обувь':     { emoji: '👟', desc: 'Balenciaga, Nike' },
+  'Обувь':     { emoji: '👟', desc: 'Balenciaga, Nike, Erd, Rick Owens' },
   'Сумки':     { emoji: '👜', desc: 'Hermes Birkin, Louis Vuitton, Chanel, Prada, Balenciaga' },
   'Косметика': { emoji: '💄', desc: 'Rhode, Huda Beauty, Summer Fridays, Dior' },
+  'Украшения':   { emoji: '💍', desc: 'Cartier, Van Cleef, Chanel, Bvlgari' },
 };
 const DEFAULT_META = { emoji: '🛍️', desc: '' };
 

@@ -32,7 +32,8 @@ const CATEGORIES = [
   { text: '👔 Футболки', value: 'Футболки' },
   { text: '👟 Обувь', value: 'Обувь' },
   { text: '👜 Сумки', value: 'Сумки' },
-  { text: '💄 Косметика', value: 'Косметика' }
+  { text: '💄 Косметика', value: 'Косметика' },
+  { text: '💍 Украшения', value: 'Украшения' }
 ];
 
 async function loadAdmins() {
