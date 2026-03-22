@@ -1,7 +1,7 @@
 import { useState, memo } from 'react';
 import { vibrate } from '../utils/telegram';
 
-const ProductCard = memo(({ product, isFavorite, onToggleFavorite, onNavigate }) => {
+const ProductCard = memo(({ product, isFavorite, onToggleFavorite, onNavigate, showCategory = true }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
 
   const handleCardClick = () => {
@@ -64,11 +64,13 @@ const ProductCard = memo(({ product, isFavorite, onToggleFavorite, onNavigate })
 
         {/* Бейджи внизу слева */}
         <div className="absolute bottom-3 left-3 flex flex-col gap-1">
-          <span className="px-3 py-1 bg-black/50 backdrop-blur-sm rounded-full text-xs font-medium text-white">
-            {product.category}
-          </span>
+          {showCategory && (
+            <span className="px-3 py-1 bg-black/50 backdrop-blur-sm rounded-full text-xs font-medium text-white">
+              {product.category}
+            </span>
+          )}
           {product.isPreorder && (
-            <span className="px-3 py-1 bg-orange-500/80 backdrop-blur-sm rounded-full text-xs font-semibold text-white">
+            <span className="px-2 py-0.5 bg-orange-500/80 backdrop-blur-sm rounded-full text-[10px] font-semibold text-white">
               📦 На заказ
             </span>
           )}
@@ -97,7 +99,8 @@ const ProductCard = memo(({ product, isFavorite, onToggleFavorite, onNavigate })
   return (
     prevProps.product.id === nextProps.product.id &&
     prevProps.isFavorite === nextProps.isFavorite &&
-    prevProps.product.isPreorder === nextProps.product.isPreorder
+    prevProps.product.isPreorder === nextProps.product.isPreorder &&
+    prevProps.showCategory === nextProps.showCategory
   );
 });
 

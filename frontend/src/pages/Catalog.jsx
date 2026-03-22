@@ -244,6 +244,7 @@ const Catalog = ({ navigate }) => {
                     isFavorite={favorites.includes(product.id)}
                     onToggleFavorite={handleToggleFavorite}
                     onNavigate={navigate}
+                    showCategory={false}
                   />
                 ))}
               </div>
