@@ -72,20 +72,22 @@ function buildListMessage(products, page) {
   const totalPages = Math.ceil(products.length / PAGE_SIZE);
   const slice      = products.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-  let text = `📦 *Товары* — стр. ${page + 1}/${totalPages} (всего: ${products.length})\n`;
-  text    += `БД: ${USE_MONGODB ? 'MongoDB ✅' : 'JSON 📁'}\n`;
-  text    += '─'.repeat(28) + '\n\n';
+  let text = `📦 Товары — стр. ${page + 1}/${totalPages} (всего: ${products.length})\n`;
+  text    += `БД: ${USE_MONGODB ? 'MongoDB' : 'JSON'}\n`;
+  text    += '—'.repeat(24) + '\n\n';
 
   slice.forEach((p, i) => {
     const n    = page * PAGE_SIZE + i + 1;
     const mark = p.isPreorder ? '📦' : '✅';
-    text += `${n}\\. ${mark} *${escMd(p.name)}*\n`;
-    text += `   💰 ${p.price.toLocaleString('ru-RU')} ₽  🏷 ${escMd(p.category)}\n`;
-    text += `   🆔 \`${p.id}\`\n`;
-    text += `   📸 ${p.photos.length} фото\n\n`;
+    text += `${n}. ${mark} ${p.name}\n`;
+    text += `   ${p.price.toLocaleString('ru-RU')} руб  |  ${p.category}\n`;
+    text += `   ID: ${p.id}\n`;
+    text += `   Фото: ${p.photos.length} шт.\n\n`;
   });
 
-  text += `\n_/edit\\_product \\[ID\\] — редакт\\._\n_/delete\\_product \\[ID\\] — удалить_\n_/insert\\_photo \\[ID\\] \\[позиция\\] — вставить фото_`;
+  text += '/edit_product [ID] — редакт.\n';
+  text += '/delete_product [ID] — удалить\n';
+  text += '/insert_photo [ID] [позиция] — вставить фото';
 
   return text;
 }
@@ -94,16 +96,11 @@ function buildListKeyboard(products, page) {
   const totalPages = Math.ceil(products.length / PAGE_SIZE);
   const nav = [];
 
-  if (page > 0)             nav.push({ text: '◀️ Назад',    callback_data: `lp_${page - 1}` });
-  nav.push({ text: `${page + 1} / ${totalPages}`, callback_data: 'lp_noop' });
+  if (page > 0)              nav.push({ text: '◀️ Назад',   callback_data: `lp_${page - 1}` });
+  nav.push({ text: `${page + 1} / ${totalPages}`,           callback_data: 'lp_noop' });
   if (page < totalPages - 1) nav.push({ text: 'Вперёд ▶️', callback_data: `lp_${page + 1}` });
 
   return { inline_keyboard: [nav] };
-}
-
-// Экранирование для MarkdownV2
-function escMd(str) {
-  return String(str).replace(/[_*[\]()~`>#+\-=|{}.!\\]/g, c => '\\' + c);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -162,10 +159,7 @@ bot.onText(/\/list_products/, async (msg) => {
   const text  = buildListMessage(products, page);
   const reply_markup = buildListKeyboard(products, page);
 
-  const sent = await bot.sendMessage(chatId, text, {
-    parse_mode: 'MarkdownV2',
-    reply_markup
-  });
+  const sent = await bot.sendMessage(chatId, text, { reply_markup });
 
   listState[chatId] = { page, messageId: sent.message_id };
 });
@@ -212,12 +206,10 @@ bot.onText(/\/insert_photo(?:\s+(\S+))?(?:\s+(\d+))?/, async (msg, match) => {
   };
 
   await bot.sendMessage(chatId,
-    `📸 Товар: *${escMd(product.name)}*\n` +
+    `📸 Товар: ${product.name}\n` +
     `Текущих фото: ${product.photos.length}\n` +
-    `Новое фото будет вставлено на позицию: *${clampedPos}* ` +
-    `(${clampedPos === 0 ? '🔝 самое первое / превью' : `после фото №${clampedPos}`})\n\n` +
-    `Отправьте фото 👇`,
-    { parse_mode: 'MarkdownV2' }
+    `Позиция вставки: ${clampedPos} ${clampedPos === 0 ? '(превью / самое первое)' : `(после фото №${clampedPos})`}\n\n` +
+    `Отправьте фото 👇`
   );
 });
 
@@ -385,7 +377,6 @@ bot.on('callback_query', async (query) => {
       await bot.editMessageText(text, {
         chat_id: chatId,
         message_id: query.message.message_id,
-        parse_mode: 'MarkdownV2',
         reply_markup
       });
     } catch (e) {
